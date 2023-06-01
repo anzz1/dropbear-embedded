@@ -183,7 +183,6 @@ struct sshsession {
 									  remote connection */
 
 	void(*extra_session_cleanup)(void); /* client or server specific cleanup */
-	void(*send_kex_first_guess)(void);
 
 	struct AuthState authstate; /* Common amongst client and server, since most
 								   struct elements are common */

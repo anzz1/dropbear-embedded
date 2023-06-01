@@ -89,7 +89,7 @@ void send_msg_kexinit() {
 	buf_putstring(ses.writepayload, "", 0);
 
 	/* first_kex_packet_follows */
-	buf_putbyte(ses.writepayload, (ses.send_kex_first_guess != NULL));
+	buf_putbyte(ses.writepayload, 0x00);
 
 	/* reserved unit32 */
 	buf_putint(ses.writepayload, 0);
@@ -105,15 +105,8 @@ void send_msg_kexinit() {
 
 	ses.newkeys = (struct key_context*)m_malloc(sizeof(struct key_context));
 
-	if (ses.send_kex_first_guess) {
-		ses.newkeys->algo_kex = sshkex[0].data;
-		ses.newkeys->algo_hostkey = sshhostkey[0].val;
-		ses.send_kex_first_guess();
-	}
-
 	TRACE(("DATAALLOWED=0"))
 	TRACE(("-> KEXINIT"))
-
 }
 
 static void switch_keys() {
@@ -205,7 +198,7 @@ static void kexinitialise() {
 	ses.kexstate.sentnewkeys = 0;
 
 	/* first_packet_follows */
-	ses.kexstate.them_firstfollows = 0;
+	ses.kexstate.firstfollows = 0;
 
 	ses.kexstate.datatrans = 0;
 	ses.kexstate.datarecv = 0;
@@ -560,29 +553,22 @@ static void read_kex_algos() {
 	int allgood = 1; /* we AND this with each goodguess and see if its still
 						true after */
 
-#ifdef USE_KEXGUESS2
-	enum kexguess2_used kexguess2 = KEXGUESS2_LOOK;
-#else
-	enum kexguess2_used kexguess2 = KEXGUESS2_NO;
-#endif
-
 	buf_incrpos(ses.payload, 16); /* start after the cookie */
 
 	memset(ses.newkeys, 0x0, sizeof(*ses.newkeys));
 
 	/* kex_algorithms */
-	algo = buf_match_algo(ses.payload, sshkex, &kexguess2, &goodguess);
+	algo = buf_match_algo(ses.payload, sshkex, &goodguess);
 	allgood &= goodguess;
-	if (algo == NULL || algo->val == KEXGUESS2_ALGO_ID) {
+	if (algo == NULL) {
 		erralgo = "kex";
 		goto error;
 	}
-	TRACE(("kexguess2 %d", kexguess2))
 	TRACE(("kex algo %s", algo->name))
 	ses.newkeys->algo_kex = algo->data;
 
 	/* server_host_key_algorithms */
-	algo = buf_match_algo(ses.payload, sshhostkey, &kexguess2, &goodguess);
+	algo = buf_match_algo(ses.payload, sshhostkey, &goodguess);
 	allgood &= goodguess;
 	if (algo == NULL) {
 		erralgo = "hostkey";
@@ -592,7 +578,7 @@ static void read_kex_algos() {
 	ses.newkeys->algo_hostkey = algo->val;
 
 	/* encryption_algorithms_client_to_server */
-	c2s_cipher_algo = buf_match_algo(ses.payload, sshciphers, NULL, NULL);
+	c2s_cipher_algo = buf_match_algo(ses.payload, sshciphers, NULL);
 	if (c2s_cipher_algo == NULL) {
 		erralgo = "enc c->s";
 		goto error;
@@ -600,7 +586,7 @@ static void read_kex_algos() {
 	TRACE(("enc c2s is  %s", c2s_cipher_algo->name))
 
 	/* encryption_algorithms_server_to_client */
-	s2c_cipher_algo = buf_match_algo(ses.payload, sshciphers, NULL, NULL);
+	s2c_cipher_algo = buf_match_algo(ses.payload, sshciphers, NULL);
 	if (s2c_cipher_algo == NULL) {
 		erralgo = "enc s->c";
 		goto error;
@@ -608,7 +594,7 @@ static void read_kex_algos() {
 	TRACE(("enc s2c is  %s", s2c_cipher_algo->name))
 
 	/* mac_algorithms_client_to_server */
-	c2s_hash_algo = buf_match_algo(ses.payload, sshhashes, NULL, NULL);
+	c2s_hash_algo = buf_match_algo(ses.payload, sshhashes, NULL);
 	if (c2s_hash_algo == NULL) {
 		erralgo = "mac c->s";
 		goto error;
@@ -616,7 +602,7 @@ static void read_kex_algos() {
 	TRACE(("hash c2s is  %s", c2s_hash_algo->name))
 
 	/* mac_algorithms_server_to_client */
-	s2c_hash_algo = buf_match_algo(ses.payload, sshhashes, NULL, NULL);
+	s2c_hash_algo = buf_match_algo(ses.payload, sshhashes, NULL);
 	if (s2c_hash_algo == NULL) {
 		erralgo = "mac s->c";
 		goto error;
@@ -624,7 +610,7 @@ static void read_kex_algos() {
 	TRACE(("hash s2c is  %s", s2c_hash_algo->name))
 
 	/* compression_algorithms_client_to_server */
-	c2s_comp_algo = buf_match_algo(ses.payload, ses.compress_algos, NULL, NULL);
+	c2s_comp_algo = buf_match_algo(ses.payload, ses.compress_algos, NULL);
 	if (c2s_comp_algo == NULL) {
 		erralgo = "comp c->s";
 		goto error;
@@ -632,7 +618,7 @@ static void read_kex_algos() {
 	TRACE(("hash c2s is  %s", c2s_comp_algo->name))
 
 	/* compression_algorithms_server_to_client */
-	s2c_comp_algo = buf_match_algo(ses.payload, ses.compress_algos, NULL, NULL);
+	s2c_comp_algo = buf_match_algo(ses.payload, ses.compress_algos, NULL);
 	if (s2c_comp_algo == NULL) {
 		erralgo = "comp s->c";
 		goto error;
@@ -645,10 +631,9 @@ static void read_kex_algos() {
 	/* languages_server_to_client */
 	buf_eatstring(ses.payload);
 
-	/* their first_kex_packet_follows */
+	/* first_kex_packet_follows */
 	if (buf_getbool(ses.payload)) {
-		TRACE(("them kex firstfollows. allgood %d", allgood))
-		ses.kexstate.them_firstfollows = 1;
+		ses.kexstate.firstfollows = 1;
 		/* if the guess wasn't good, we ignore the packet sent */
 		if (!allgood) {
 			ses.ignorenext = 1;
@@ -676,10 +661,6 @@ static void read_kex_algos() {
 	/* reserved for future extensions */
 	buf_getint(ses.payload);
 
-	if (ses.send_kex_first_guess && allgood) {
-		TRACE(("our_first_follows_matches 1"))
-		ses.kexstate.our_first_follows_matches = 1;
-	}
 	return;
 
 error:

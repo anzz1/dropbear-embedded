@@ -186,9 +186,6 @@ algo_type sshkex[] = {
 #if DROPBEAR_DH_GROUP1
 	{"diffie-hellman-group1-sha1", 0, &kex_dh_group1, 1, NULL},
 #endif
-#ifdef USE_KEXGUESS2
-	{KEXGUESS2_ALGO_NAME, KEXGUESS2_ALGO_ID, NULL, 1, NULL},
-#endif
 	{NULL, 0, NULL, 0, NULL}
 };
 
@@ -236,10 +233,8 @@ void buf_put_algolist(buffer * buf, algo_type localalgos[]) {
  * (*goodguess) is set to 1 if the preferred client/server algos match,
  * 0 otherwise. This is used for checking if the kexalgo/hostkeyalgos are
  * guessed correctly */
-algo_type * buf_match_algo(buffer* buf, algo_type localalgos[],
-		enum kexguess2_used *kexguess2, int *goodguess)
+algo_type * buf_match_algo(buffer* buf, algo_type localalgos[], int *goodguess)
 {
-
 	char * algolist = NULL;
 	const char *remotenames[MAX_PROPOSED_ALGO], *localnames[MAX_PROPOSED_ALGO];
 	unsigned int len;
@@ -276,18 +271,6 @@ algo_type * buf_match_algo(buffer* buf, algo_type localalgos[],
 			break;
 		}
 	}
-	if (kexguess2 && *kexguess2 == KEXGUESS2_LOOK) {
-		for (i = 0; i < remotecount; i++)
-		{
-			if (strcmp(remotenames[i], KEXGUESS2_ALGO_NAME) == 0) {
-				*kexguess2 = KEXGUESS2_YES;
-				break;
-			}
-		}
-		if (*kexguess2 == KEXGUESS2_LOOK) {
-			*kexguess2 = KEXGUESS2_NO;
-		}
-	}
 
 	for (i = 0; localalgos[i].name != NULL; i++) {
 		if (localalgos[i].usable) {
@@ -312,16 +295,9 @@ algo_type * buf_match_algo(buffer* buf, algo_type localalgos[],
 			}
 			if (strcmp(servnames[j], clinames[i]) == 0) {
 				/* set if it was a good guess */
-				if (goodguess && kexguess2) {
-					if (*kexguess2 == KEXGUESS2_YES) {
-						if (i == 0) {
-							*goodguess = 1;
-						}
-
-					} else {
-						if (i == 0 && j == 0) {
-							*goodguess = 1;
-						}
+				if (goodguess) {
+					if (i == 0 && j == 0) {
+						*goodguess = 1;
 					}
 				}
 				/* set the algo to return */
