@@ -213,29 +213,6 @@ void dropbear_trace2(const char* format, ...) {
 }
 #endif /* DEBUG_TRACE */
 
-/* Connect to a given unix socket. The socket is blocking */
-#ifdef ENABLE_CONNECT_UNIX
-int connect_unix(const char* path) {
-	struct sockaddr_un addr;
-	int fd = -1;
-
-	memset((void*)&addr, 0x0, sizeof(addr));
-	addr.sun_family = AF_UNIX;
-	strlcpy(addr.sun_path, path, sizeof(addr.sun_path));
-	fd = socket(PF_UNIX, SOCK_STREAM, 0);
-	if (fd < 0) {
-		TRACE(("Failed to open unix socket"))
-		return -1;
-	}
-	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-		TRACE(("Failed to connect to '%s' socket", path))
-		m_close(fd);
-		return -1;
-	}
-	return fd;
-}
-#endif
-
 /* Sets up a pipe for a, returning three non-blocking file descriptors
  * and the pid. exec_fn is the function that will actually execute the child process,
  * it will be run after the child has fork()ed, and is passed exec_data.
@@ -338,7 +315,9 @@ void run_shell_command(const char* cmd, unsigned int maxfd, char* usershell) {
 	unsigned int i;
 
 	baseshell = basename(usershell);
+	argv[0] = baseshell;
 
+#if 0
 	if (cmd != NULL) {
 		argv[0] = baseshell;
 	} else {
@@ -347,6 +326,7 @@ void run_shell_command(const char* cmd, unsigned int maxfd, char* usershell) {
 		argv[0] = (char*)m_malloc(len);
 		snprintf(argv[0], len, "-%s", baseshell);
 	}
+#endif
 
 	if (cmd != NULL) {
 		argv[1] = "-c";
@@ -460,47 +440,6 @@ out:
 	}
 	return ret;
 }
-
-/* get a line from the file into buffer in the style expected for an
- * authkeys file.
- * Will return DROPBEAR_SUCCESS if data is read, or DROPBEAR_FAILURE on EOF.*/
-/* Only used for ~/.ssh/known_hosts and ~/.ssh/authorized_keys */
-#if defined(DROPBEAR_CLIENT) || defined(ENABLE_SVR_PUBKEY_AUTH)
-int buf_getline(buffer * line, FILE * authfile) {
-
-	int c = EOF;
-
-	buf_setpos(line, 0);
-	buf_setlen(line, 0);
-
-	while (line->pos < line->size) {
-
-		c = fgetc(authfile); /*getc() is weird with some uClibc systems*/
-		if (c == EOF || c == '\n' || c == '\r') {
-			goto out;
-		}
-
-		buf_putbyte(line, (unsigned char)c);
-	}
-
-	TRACE(("leave getauthline: line too long"))
-	/* We return success, but the line length will be zeroed - ie we just
-	 * ignore that line */
-	buf_setlen(line, 0);
-
-out:
-
-
-	/* if we didn't read anything before EOF or error, exit */
-	if (c == EOF && line->pos == 0) {
-		return DROPBEAR_FAILURE;
-	} else {
-		buf_setpos(line, 0);
-		return DROPBEAR_SUCCESS;
-	}
-
-}	
-#endif
 
 /* make sure that the socket closes */
 void m_close(int fd) {

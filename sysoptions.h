@@ -26,11 +26,11 @@
 /* A client should try and send an initial key exchange packet guessing
  * the algorithm that will match - saves a round trip connecting, has little
  * overhead if the guess was "wrong". */
-#define USE_KEX_FIRST_FOLLOWS
+// #define USE_KEX_FIRST_FOLLOWS
 /* Use protocol extension to allow "first follows" to succeed more frequently.
  * This is currently Dropbear-specific but will gracefully fallback when connecting
  * to other implementations. */
-#define USE_KEXGUESS2
+// #define USE_KEXGUESS2
 
 /* Minimum key sizes for DSS and RSA */
 #ifndef MIN_DSS_KEYLEN
@@ -69,71 +69,24 @@
 #define DROPBEAR_SUCCESS 0
 #define DROPBEAR_FAILURE -1
 
-/* Required for pubkey auth */
-#if defined(ENABLE_SVR_PUBKEY_AUTH) || defined(DROPBEAR_CLIENT)
-#define DROPBEAR_SIGNKEY_VERIFY
-#endif
-
 #define SHA1_HASH_SIZE 20
 #define MD5_HASH_SIZE 16
-#define MAX_HASH_SIZE 64 /* sha512 */
+#define MAX_HASH_SIZE 20 /* sha1 */
 
-#define MAX_KEY_LEN 32 /* 256 bits for aes256 etc */
+#define MAX_KEY_LEN 16 /* 128 bits for aes128 */
 #define MAX_IV_LEN 20 /* must be same as max blocksize,  */
-
-#if defined(DROPBEAR_SHA2_512_HMAC)
-#define MAX_MAC_LEN 64
-#elif defined(DROPBEAR_SHA2_256_HMAC)
-#define MAX_MAC_LEN 32
-#else
 #define MAX_MAC_LEN 20
-#endif
-
-#if defined(DROPBEAR_ECDH) || defined (DROPBEAR_ECDSA)
-#define DROPBEAR_ECC
-/* Debian doesn't define this in system headers */
-#ifndef LTM_DESC
-#define LTM_DESC
-#endif
-#endif
-
-#ifdef DROPBEAR_ECC
-#define DROPBEAR_ECC_256
-#define DROPBEAR_ECC_384
-#define DROPBEAR_ECC_521
-#endif
-
-#ifdef DROPBEAR_ECC
-#define DROPBEAR_LTC_PRNG
-#endif
 
 /* RSA can be vulnerable to timing attacks which use the time required for
  * signing to guess the private key. Blinding avoids this attack, though makes
  * signing operations slightly slower. */
-#define RSA_BLINDING
+// #define RSA_BLINDING
 
 /* hashes which will be linked and registered */
-#if defined(DROPBEAR_SHA2_256_HMAC) || defined(DROPBEAR_ECC_256) || defined(DROPBEAR_CURVE25519) || DROPBEAR_DH_GROUP14
-#define DROPBEAR_SHA256
-#endif
-#if defined(DROPBEAR_ECC_384)
-#define DROPBEAR_SHA384
-#endif
 /* LTC SHA384 depends on SHA512 */
-#if defined(DROPBEAR_SHA2_512_HMAC) || defined(DROPBEAR_ECC_521) || defined(DROPBEAR_ECC_384) || DROPBEAR_DH_GROUP16
-#define DROPBEAR_SHA512
-#endif
 #if defined(DROPBEAR_MD5_HMAC)
 #define DROPBEAR_MD5
 #endif
-
-/* These are disabled in Dropbear 2016.73 by default since the spec 
-   draft-ietf-curdle-ssh-kex-sha2-02 is under development. */
-#define DROPBEAR_DH_GROUP14_256 0
-#define DROPBEAR_DH_GROUP16 0
-
-/* roughly 2x 521 bits */
-#define MAX_ECC_SIZE 140
 
 #define MAX_NAME_LEN 64 /* maximum length of a protocol name, isn't
 						   explicitly specified for all protocols (just
@@ -166,7 +119,7 @@
 /* For a 4096 bit DSS key, empirically determined */
 #define MAX_PRIVKEY_SIZE 1700
 
-#define MAX_HOSTKEYS 3
+#define MAX_HOSTKEYS 2
 
 /* The maximum size of the bignum portion of the kexhash buffer */
 /* Sect. 8 of the transport rfc 4253, K_S + e + f + K */
@@ -181,76 +134,9 @@
 												accept for keyb-interactive
 												auth */
 
-
-#if defined(DROPBEAR_AES256) || defined(DROPBEAR_AES128)
+#if defined(DROPBEAR_AES128)
 #define DROPBEAR_AES
 #endif
-
-#if defined(DROPBEAR_TWOFISH256) || defined(DROPBEAR_TWOFISH128)
-#define DROPBEAR_TWOFISH
-#endif
-
-#ifndef ENABLE_X11FWD
-#define DISABLE_X11FWD
-#endif
-
-#if defined(ENABLE_CLI_REMOTETCPFWD) || defined(ENABLE_CLI_LOCALTCPFWD)
-#define ENABLE_CLI_ANYTCPFWD 
-#endif
-
-#if defined(ENABLE_CLI_LOCALTCPFWD) || defined(ENABLE_SVR_REMOTETCPFWD)
-#define DROPBEAR_TCP_ACCEPT
-#endif
-
-#if defined(ENABLE_CLI_REMOTETCPFWD) || defined(ENABLE_CLI_LOCALTCPFWD) || \
-	defined(ENABLE_SVR_REMOTETCPFWD) || defined(ENABLE_SVR_LOCALTCPFWD) || \
-	defined(ENABLE_SVR_AGENTFWD) || defined(ENABLE_X11FWD)
-#define USING_LISTENERS
-#endif
-
-#if defined(ENABLE_CLI_NETCAT) && defined(ENABLE_CLI_PROXYCMD)
-#define ENABLE_CLI_MULTIHOP
-#endif
-
-#if defined(ENABLE_CLI_AGENTFWD) || defined(DROPBEAR_PRNGD_SOCKET)
-#define ENABLE_CONNECT_UNIX
-#endif
-
-#if defined(DROPBEAR_CLIENT) || defined(ENABLE_SVR_PUBKEY_AUTH)
-#define DROPBEAR_KEY_LINES /* ie we're using authorized_keys or known_hosts */
-#endif
-
-/* Changing this is inadvisable, it appears to have problems
- * with flushing compressed data */
-#define DROPBEAR_ZLIB_MEM_LEVEL 8
-
-#if defined(ENABLE_SVR_PASSWORD_AUTH) && defined(ENABLE_SVR_PAM_AUTH)
-#error "You can't turn on PASSWORD and PAM auth both at once. Fix it in options.h"
-#endif
-
-/* We use dropbear_client and dropbear_server as shortcuts to avoid redundant
- * code, if we're just compiling as client or server */
-#if defined(DROPBEAR_SERVER) && defined(DROPBEAR_CLIENT)
-
-#define IS_DROPBEAR_SERVER (ses.isserver == 1)
-#define IS_DROPBEAR_CLIENT (ses.isserver == 0)
-
-#elif defined(DROPBEAR_SERVER)
-
-#define IS_DROPBEAR_SERVER 1
-#define IS_DROPBEAR_CLIENT 0
-
-#elif defined(DROPBEAR_CLIENT)
-
-#define IS_DROPBEAR_SERVER 0
-#define IS_DROPBEAR_CLIENT 1
-
-#else
-/* Just building key utils? */
-#define IS_DROPBEAR_SERVER 0
-#define IS_DROPBEAR_CLIENT 0
-
-#endif /* neither DROPBEAR_SERVER nor DROPBEAR_CLIENT */
 
 #ifndef HAVE_FORK
 #define USE_VFORK
@@ -271,9 +157,9 @@
 /* Linux will attempt TCP fast open, falling back if not supported by the kernel.
  * Currently server is enabled but client is disabled by default until there
  * is further compatibility testing */
-#ifdef __linux__
+// #ifdef __linux__
 #define DROPBEAR_SERVER_TCP_FAST_OPEN
-/* #define DROPBEAR_CLIENT_TCP_FAST_OPEN */
-#endif
+#define DROPBEAR_CLIENT_TCP_FAST_OPEN
+// #endif
 
 /* no include guard for this file */

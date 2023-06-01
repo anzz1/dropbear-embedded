@@ -25,9 +25,7 @@
 #ifndef DROPBEAR_CHANSESSION_H_
 #define DROPBEAR_CHANSESSION_H_
 
-#include "loginrec.h"
 #include "channel.h"
-#include "listener.h"
 
 struct exitinfo {
 
@@ -57,25 +55,6 @@ struct ChanSess {
 	char *connection_string;
 	/* Used to set $SSH_CLIENT in the child session. */
 	char *client_string;
-	
-#ifndef DISABLE_X11FWD
-	struct Listener * x11listener;
-	int x11port;
-	char * x11authprot;
-	char * x11authcookie;
-	unsigned int x11screennum;
-	unsigned char x11singleconn;
-#endif
-
-#ifdef ENABLE_SVR_AGENTFWD
-	struct Listener * agentlistener;
-	char * agentfile;
-	char * agentdir;
-#endif
-
-#ifdef ENABLE_SVR_PUBKEY_OPTIONS
-	char *original_command;
-#endif
 };
 
 struct ChildPid {
@@ -85,13 +64,6 @@ struct ChildPid {
 
 
 void addnewvar(const char* param, const char* var);
-
-void cli_send_chansess_request(void);
-void cli_tty_cleanup(void);
-void cli_chansess_winchange(void);
-#ifdef ENABLE_CLI_NETCAT
-void cli_send_netcat_request(void);
-#endif
 
 void svr_chansessinitialise(void);
 extern const struct ChanType svrchansess;

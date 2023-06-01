@@ -33,8 +33,6 @@
 #include "termcodes.h"
 #include "ssh.h"
 #include "dbrandom.h"
-#include "x11fwd.h"
-#include "agentfwd.h"
 #include "runopts.h"
 #include "auth.h"
 
@@ -254,30 +252,10 @@ static int newchansess(struct Channel *channel) {
 
 	channel->typedata = chansess;
 
-#ifndef DISABLE_X11FWD
-	chansess->x11listener = NULL;
-	chansess->x11authprot = NULL;
-	chansess->x11authcookie = NULL;
-#endif
-
-#ifdef ENABLE_SVR_AGENTFWD
-	chansess->agentlistener = NULL;
-	chansess->agentfile = NULL;
-	chansess->agentdir = NULL;
-#endif
-
 	channel->prio = DROPBEAR_CHANNEL_PRIO_INTERACTIVE;
 
 	return 0;
 
-}
-
-static struct logininfo* 
-chansess_login_alloc(struct ChanSess *chansess) {
-	struct logininfo * li;
-	li = login_alloc_entry(chansess->pid, ses.authstate.username,
-			svr_ses.remotehost, chansess->tty);
-	return li;
 }
 
 /* clean a session channel */
@@ -285,7 +263,6 @@ static void closechansess(struct Channel *channel) {
 
 	struct ChanSess *chansess;
 	unsigned int i;
-	struct logininfo *li;
 
 	TRACE(("enter closechansess"))
 
@@ -301,27 +278,10 @@ static void closechansess(struct Channel *channel) {
 	m_free(chansess->cmd);
 	m_free(chansess->term);
 
-#ifdef ENABLE_SVR_PUBKEY_OPTIONS
-	m_free(chansess->original_command);
-#endif
-
 	if (chansess->tty) {
-		/* write the utmp/wtmp login record */
-		li = chansess_login_alloc(chansess);
-		login_logout(li);
-		login_free_entry(li);
-
 		pty_release(chansess->tty);
 		m_free(chansess->tty);
 	}
-
-#ifndef DISABLE_X11FWD
-	x11cleanup(chansess);
-#endif
-
-#ifdef ENABLE_SVR_AGENTFWD
-	svr_agentcleanup(chansess);
-#endif
 
 	/* clear child pid entries */
 	for (i = 0; i < svr_ses.childpidsize; i++) {
@@ -373,14 +333,6 @@ static void chansessionrequest(struct Channel *channel) {
 		ret = sessioncommand(channel, chansess, 1, 0);
 	} else if (strcmp(type, "subsystem") == 0) {
 		ret = sessioncommand(channel, chansess, 1, 1);
-#ifndef DISABLE_X11FWD
-	} else if (strcmp(type, "x11-req") == 0) {
-		ret = x11req(chansess);
-#endif
-#ifdef ENABLE_SVR_AGENTFWD
-	} else if (strcmp(type, "auth-agent-req@openssh.com") == 0) {
-		ret = svr_agentreq(chansess);
-#endif
 	} else if (strcmp(type, "signal") == 0) {
 		ret = sessionsignal(chansess);
 	} else {
@@ -561,11 +513,6 @@ static int sessionpty(struct ChanSess * chansess) {
 	struct passwd * pw = NULL;
 
 	TRACE(("enter sessionpty"))
-
-	if (!svr_pubkey_allows_pty()) {
-		TRACE(("leave sessionpty : pty forbidden by public key option"))
-		return DROPBEAR_FAILURE;
-	}
 
 	chansess->term = buf_getstring(ses.payload, &termlen);
 	if (termlen > MAX_TERM_LEN) {
@@ -760,7 +707,7 @@ static int noptycommand(struct Channel *channel, struct ChanSess *chansess) {
 static int ptycommand(struct Channel *channel, struct ChanSess *chansess) {
 
 	pid_t pid;
-	struct logininfo *li = NULL;
+
 #ifdef DO_MOTD
 	buffer * motdbuf = NULL;
 	int len;
@@ -806,12 +753,6 @@ static int ptycommand(struct Channel *channel, struct ChanSess *chansess) {
 		}
 
 		close(chansess->slave);
-
-		/* write the utmp/wtmp login record - must be after changing the
-		 * terminal used for stdout with the dup2 above */
-		li = chansess_login_alloc(chansess);
-		login_login(li);
-		login_free_entry(li);
 
 #ifdef DO_MOTD
 		if (svr_opts.domotd && !chansess->cmd) {
@@ -905,6 +846,7 @@ static void execchild(void *user_data) {
 	seedrandom();
 #endif
 
+#if 0
 	/* clear environment */
 	/* if we're debugging using valgrind etc, we need to keep the LD_PRELOAD
 	 * etc. This is hazardous, so should only be used for debugging. */
@@ -918,6 +860,7 @@ static void execchild(void *user_data) {
 	}
 #endif /* HAVE_CLEARENV */
 #endif /* DEBUG_VALGRIND */
+
 
 	/* We can only change uid/gid as root ... */
 	if (getuid() == 0) {
@@ -949,6 +892,8 @@ static void execchild(void *user_data) {
 	addnewvar("HOME", ses.authstate.pw_dir);
 	addnewvar("SHELL", get_user_shell());
 	addnewvar("PATH", DEFAULT_PATH);
+#endif
+
 	if (chansess->term != NULL) {
 		addnewvar("TERM", chansess->term);
 	}
@@ -964,25 +909,12 @@ static void execchild(void *user_data) {
 	if (chansess->client_string) {
 		addnewvar("SSH_CLIENT", chansess->client_string);
 	}
-	
-#ifdef ENABLE_SVR_PUBKEY_OPTIONS
-	if (chansess->original_command) {
-		addnewvar("SSH_ORIGINAL_COMMAND", chansess->original_command);
-	}
-#endif
 
+#if 0
 	/* change directory */
 	if (chdir(ses.authstate.pw_dir) < 0) {
 		dropbear_exit("Error changing directory");
 	}
-
-#ifndef DISABLE_X11FWD
-	/* set up X11 forwarding if enabled */
-	x11setauth(chansess);
-#endif
-#ifdef ENABLE_SVR_AGENTFWD
-	/* set up agent env variable */
-	svr_agentset(chansess);
 #endif
 
 	usershell = m_strdup(get_user_shell());

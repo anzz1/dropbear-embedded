@@ -124,11 +124,6 @@ void common_session_init(int sock_in, int sock_out) {
 	ses.keys->recv.algo_comp = DROPBEAR_COMP_NONE;
 	ses.keys->trans.algo_comp = DROPBEAR_COMP_NONE;
 
-#ifndef DISABLE_ZLIB
-	ses.keys->recv.zstream = NULL;
-	ses.keys->trans.zstream = NULL;
-#endif
-
 	/* key exchange buffers */
 	ses.session_id = NULL;
 	ses.kexhashbuf = NULL;
@@ -296,10 +291,6 @@ void session_cleanup() {
 
 	/* After these are freed most functions will fail */
 #ifdef DROPBEAR_CLEANUP
-	/* listeners call cleanup functions, this should occur before
-	other session state is freed. */
-	remove_all_listeners();
-
 	remove_connect_pending();
 
 	while (!isempty(&ses.writequeue)) {
@@ -493,8 +484,7 @@ static void checktimeouts() {
 	time_t now;
 	now = monotonic_now();
 	
-	if (IS_DROPBEAR_SERVER && ses.connect_time != 0
-		&& now - ses.connect_time >= AUTH_TIMEOUT) {
+	if (ses.connect_time != 0 && now - ses.connect_time >= AUTH_TIMEOUT) {
 			dropbear_close("Timeout before auth");
 	}
 
@@ -557,7 +547,7 @@ static long select_timeout() {
 		update_timeout(KEX_REKEY_TIMEOUT, now, ses.kexstate.lastkextime, &timeout);
 	}
 
-	if (ses.authstate.authdone != 1 && IS_DROPBEAR_SERVER) {
+	if (ses.authstate.authdone != 1) {
 		/* AUTH_TIMEOUT is only relevant before authdone */
 		update_timeout(AUTH_TIMEOUT, now, ses.connect_time, &timeout);
 	}
@@ -576,13 +566,26 @@ static long select_timeout() {
 }
 
 const char* get_user_shell() {
-	/* an empty shell should be interpreted as "/bin/sh" */
-	if (ses.authstate.pw_shell[0] == '\0') {
-		return "/bin/sh";
-	} else {
-		return ses.authstate.pw_shell;
-	}
+	return "/bin/sh";
 }
+
+#ifdef FAKE_ROOT
+struct passwd *get_fake_pwnam(const char *username) {
+	static struct passwd *pw=NULL;
+	if(username && !strcmp(username,"root")) {
+		pw = (struct passwd *)malloc(sizeof(struct passwd));
+		if (pw) {
+		    pw->pw_uid=0;
+		    pw->pw_gid=0;
+		    pw->pw_name="root";
+		    pw->pw_dir="/";
+		    pw->pw_shell=NULL;
+		}
+    }
+    return pw;
+}
+#endif
+
 void fill_passwd(const char* username) {
 	struct passwd *pw = NULL;
 	if (ses.authstate.pw_name)
@@ -595,6 +598,13 @@ void fill_passwd(const char* username) {
 		m_free(ses.authstate.pw_passwd);
 
 	pw = getpwnam(username);
+
+#ifdef FAKE_ROOT
+	if (!pw) {
+		pw = get_fake_pwnam(username);
+	}
+#endif
+
 	if (!pw) {
 		return;
 	}

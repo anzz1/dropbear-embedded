@@ -42,9 +42,6 @@ typedef struct {
 } dropbear_dss_key;
 
 void buf_put_dss_sign(buffer* buf, dropbear_dss_key *key, buffer *data_buf);
-#ifdef DROPBEAR_SIGNKEY_VERIFY
-int buf_dss_verify(buffer* buf, dropbear_dss_key *key, buffer *data_buf);
-#endif
 int buf_get_dss_pub_key(buffer* buf, dropbear_dss_key *key);
 int buf_get_dss_priv_key(buffer* buf, dropbear_dss_key *key);
 void buf_put_dss_pub_key(buffer* buf, dropbear_dss_key *key);

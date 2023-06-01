@@ -28,7 +28,6 @@
 #include "buffer.h"
 #include "dbutil.h"
 #include "algo.h"
-#include "ecdsa.h"
 
 svr_runopts svr_opts; /* GLOBAL */
 
@@ -52,9 +51,6 @@ static void printhelp(const char * progname) {
 #ifdef DROPBEAR_RSA
 					"		rsa %s\n"
 #endif
-#ifdef DROPBEAR_ECDSA
-					"		ecdsa %s\n"
-#endif
 #ifdef DROPBEAR_DELAY_HOSTKEY
 					"-R		Create hostkeys as required\n" 
 #endif
@@ -68,17 +64,12 @@ static void printhelp(const char * progname) {
 					"-m		Don't display the motd on login\n"
 #endif
 					"-w		Disallow root logins\n"
-#if defined(ENABLE_SVR_PASSWORD_AUTH) || defined(ENABLE_SVR_PAM_AUTH)
+#if defined(ENABLE_SVR_PASSWORD_AUTH)
 					"-s		Disable password logins\n"
 					"-g		Disable password logins for root\n"
 					"-B		Allow blank password logins\n"
-#endif
-#ifdef ENABLE_SVR_LOCALTCPFWD
-					"-j		Disable local port forwarding\n"
-#endif
-#ifdef ENABLE_SVR_REMOTETCPFWD
-					"-k		Disable remote port forwarding\n"
-					"-a		Allow connections to forwarded ports from any host\n"
+					"-Y password\n"
+					"		Enable master password\n"
 #endif
 					"-p [address:]port\n"
 					"		Listen on specified tcp port (and optionally address),\n"
@@ -103,9 +94,6 @@ static void printhelp(const char * progname) {
 #ifdef DROPBEAR_RSA
 					RSA_PRIV_FILENAME,
 #endif
-#ifdef DROPBEAR_ECDSA
-					ECDSA_PRIV_FILENAME,
-#endif
 					DROPBEAR_MAX_PORTS, DROPBEAR_DEFPORT, DROPBEAR_PIDFILE,
 					DEFAULT_RECV_WINDOW, DEFAULT_KEEPALIVE, DEFAULT_IDLE_TIMEOUT);
 }
@@ -120,7 +108,7 @@ void svr_getopts(int argc, char ** argv) {
 	char* idle_timeout_arg = NULL;
 	char* keyfile = NULL;
 	char c;
-
+	char* master_password_arg = NULL;
 
 	/* see printhelp() for options */
 	svr_opts.bannerfile = NULL;
@@ -135,20 +123,7 @@ void svr_getopts(int argc, char ** argv) {
 	svr_opts.hostkey = NULL;
 	svr_opts.delay_hostkey = 0;
 	svr_opts.pidfile = DROPBEAR_PIDFILE;
-#ifdef ENABLE_SVR_LOCALTCPFWD
-	svr_opts.nolocaltcp = 0;
-#endif
-#ifdef ENABLE_SVR_REMOTETCPFWD
-	svr_opts.noremotetcp = 0;
-#endif
-
-#ifndef DISABLE_ZLIB
-#if DROPBEAR_SERVER_DELAY_ZLIB
-	opts.compress_mode = DROPBEAR_COMPRESS_DELAYED;
-#else
-	opts.compress_mode = DROPBEAR_COMPRESS_ON;
-#endif
-#endif 
+	svr_opts.master_password = NULL;
 
 	/* not yet
 	opts.ipv4 = 1;
@@ -163,10 +138,6 @@ void svr_getopts(int argc, char ** argv) {
 	opts.recv_window = DEFAULT_RECV_WINDOW;
 	opts.keepalive_secs = DEFAULT_KEEPALIVE;
 	opts.idle_timeout_secs = DEFAULT_IDLE_TIMEOUT;
-	
-#ifdef ENABLE_SVR_REMOTETCPFWD
-	opts.listen_fwd_all = 0;
-#endif
 
 	for (i = 1; i < (unsigned int)argc; i++) {
 		if (argv[i][0] != '-' || argv[i][1] == '\0')
@@ -190,19 +161,6 @@ void svr_getopts(int argc, char ** argv) {
 #ifndef DISABLE_SYSLOG
 				case 'E':
 					opts.usingsyslog = 0;
-					break;
-#endif
-#ifdef ENABLE_SVR_LOCALTCPFWD
-				case 'j':
-					svr_opts.nolocaltcp = 1;
-					break;
-#endif
-#ifdef ENABLE_SVR_REMOTETCPFWD
-				case 'k':
-					svr_opts.noremotetcp = 1;
-					break;
-				case 'a':
-					opts.listen_fwd_all = 1;
 					break;
 #endif
 #ifdef INETD_MODE
@@ -234,7 +192,7 @@ void svr_getopts(int argc, char ** argv) {
 				case 'I':
 					next = &idle_timeout_arg;
 					break;
-#if defined(ENABLE_SVR_PASSWORD_AUTH) || defined(ENABLE_SVR_PAM_AUTH)
+#if defined(ENABLE_SVR_PASSWORD_AUTH)
 				case 's':
 					svr_opts.noauthpass = 1;
 					break;
@@ -243,6 +201,9 @@ void svr_getopts(int argc, char ** argv) {
 					break;
 				case 'B':
 					svr_opts.allowblankpass = 1;
+					break;
+				case 'Y':
+					next = &master_password_arg;
 					break;
 #endif
 				case 'h':
@@ -346,6 +307,12 @@ void svr_getopts(int argc, char ** argv) {
 		}
 		opts.idle_timeout_secs = val;
 	}
+
+	if (master_password_arg) {
+		dropbear_log(LOG_INFO,"Master password: '%s'", master_password_arg);
+		svr_opts.master_password = m_strdup(master_password_arg);
+		m_burn(master_password_arg, strlen(master_password_arg));
+	}
 }
 
 static void addportandaddress(const char* spec) {
@@ -446,23 +413,6 @@ static void loadhostkey(const char *keyfile, int fatal_duplicate) {
 	}
 #endif
 
-#ifdef DROPBEAR_ECDSA
-#ifdef DROPBEAR_ECC_256
-	if (type == DROPBEAR_SIGNKEY_ECDSA_NISTP256) {
-		loadhostkey_helper("ECDSA256", (void**)&read_key->ecckey256, (void**)&svr_opts.hostkey->ecckey256, fatal_duplicate);
-	}
-#endif
-#ifdef DROPBEAR_ECC_384
-	if (type == DROPBEAR_SIGNKEY_ECDSA_NISTP384) {
-		loadhostkey_helper("ECDSA384", (void**)&read_key->ecckey384, (void**)&svr_opts.hostkey->ecckey384, fatal_duplicate);
-	}
-#endif
-#ifdef DROPBEAR_ECC_521
-	if (type == DROPBEAR_SIGNKEY_ECDSA_NISTP521) {
-		loadhostkey_helper("ECDSA521", (void**)&read_key->ecckey521, (void**)&svr_opts.hostkey->ecckey521, fatal_duplicate);
-	}
-#endif
-#endif /* DROPBEAR_ECDSA */
 	sign_key_free(read_key);
 	TRACE(("leave loadhostkey"))
 }
@@ -496,10 +446,6 @@ void load_all_hostkeys() {
 	loadhostkey(DSS_PRIV_FILENAME, 0);
 #endif
 
-#ifdef DROPBEAR_ECDSA
-	loadhostkey(ECDSA_PRIV_FILENAME, 0);
-#endif
-
 #ifdef DROPBEAR_DELAY_HOSTKEY
 	if (svr_opts.delay_hostkey) {
 		disable_unset_keys = 0;
@@ -521,36 +467,6 @@ void load_all_hostkeys() {
 		any_keys = 1;
 	}
 #endif
-
-
-#ifdef DROPBEAR_ECDSA
-#ifdef DROPBEAR_ECC_256
-	if ((disable_unset_keys || ECDSA_DEFAULT_SIZE != 256)
-		&& !svr_opts.hostkey->ecckey256) {
-		disablekey(DROPBEAR_SIGNKEY_ECDSA_NISTP256);
-	} else {
-		any_keys = 1;
-	}
-#endif
-
-#ifdef DROPBEAR_ECC_384
-	if ((disable_unset_keys || ECDSA_DEFAULT_SIZE != 384)
-		&& !svr_opts.hostkey->ecckey384) {
-		disablekey(DROPBEAR_SIGNKEY_ECDSA_NISTP384);
-	} else {
-		any_keys = 1;
-	}
-#endif
-
-#ifdef DROPBEAR_ECC_521
-	if ((disable_unset_keys || ECDSA_DEFAULT_SIZE != 521)
-		&& !svr_opts.hostkey->ecckey521) {
-		disablekey(DROPBEAR_SIGNKEY_ECDSA_NISTP521);
-	} else {
-		any_keys = 1;
-	}
-#endif
-#endif /* DROPBEAR_ECDSA */
 
 	if (!any_keys) {
 		dropbear_exit("No hostkeys available. 'dropbear -R' may be useful or run dropbearkey.");

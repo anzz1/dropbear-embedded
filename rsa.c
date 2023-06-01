@@ -204,62 +204,6 @@ void buf_put_rsa_priv_key(buffer* buf, dropbear_rsa_key *key) {
 
 }
 
-#ifdef DROPBEAR_SIGNKEY_VERIFY
-/* Verify a signature in buf, made on data by the key given.
- * Returns DROPBEAR_SUCCESS or DROPBEAR_FAILURE */
-int buf_rsa_verify(buffer * buf, dropbear_rsa_key *key, buffer *data_buf) {
-	unsigned int slen;
-	DEF_MP_INT(rsa_s);
-	DEF_MP_INT(rsa_mdash);
-	DEF_MP_INT(rsa_em);
-	int ret = DROPBEAR_FAILURE;
-
-	TRACE(("enter buf_rsa_verify"))
-
-	dropbear_assert(key != NULL);
-
-	m_mp_init_multi(&rsa_mdash, &rsa_s, &rsa_em, NULL);
-
-	slen = buf_getint(buf);
-	if (slen != (unsigned int)mp_unsigned_bin_size(key->n)) {
-		TRACE(("bad size"))
-		goto out;
-	}
-
-	if (mp_read_unsigned_bin(&rsa_s, buf_getptr(buf, buf->len - buf->pos),
-				buf->len - buf->pos) != MP_OKAY) {
-		TRACE(("failed reading rsa_s"))
-		goto out;
-	}
-
-	/* check that s <= n-1 */
-	if (mp_cmp(&rsa_s, key->n) != MP_LT) {
-		TRACE(("s > n-1"))
-		goto out;
-	}
-
-	/* create the magic PKCS padded value */
-	rsa_pad_em(key, data_buf, &rsa_em);
-
-	if (mp_exptmod(&rsa_s, key->e, key->n, &rsa_mdash) != MP_OKAY) {
-		TRACE(("failed exptmod rsa_s"))
-		goto out;
-	}
-
-	if (mp_cmp(&rsa_em, &rsa_mdash) == MP_EQ) {
-		/* signature is valid */
-		TRACE(("success!"))
-		ret = DROPBEAR_SUCCESS;
-	}
-
-out:
-	mp_clear_multi(&rsa_mdash, &rsa_s, &rsa_em, NULL);
-	TRACE(("leave buf_rsa_verify: ret %d", ret))
-	return ret;
-}
-
-#endif /* DROPBEAR_SIGNKEY_VERIFY */
-
 /* Sign the data presented with key, writing the signature contents
  * to the buffer */
 void buf_put_rsa_sign(buffer* buf, dropbear_rsa_key *key, buffer *data_buf) {
@@ -351,7 +295,6 @@ void buf_put_rsa_sign(buffer* buf, dropbear_rsa_key *key, buffer *data_buf) {
 		printhex("RSA sig", buf->data, buf->len);
 	}
 #endif
-	
 
 	TRACE(("leave buf_put_rsa_sign"))
 }

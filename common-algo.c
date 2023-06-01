@@ -28,8 +28,6 @@
 #include "session.h"
 #include "dbutil.h"
 #include "dh_groups.h"
-#include "ltc_prng.h"
-#include "ecc.h"
 
 /* This file (algo.c) organises the ciphers which can be used, and is used to
  * decide which ciphers/hashes/compression/signing to use during key exchange*/
@@ -53,10 +51,6 @@ static int void_start(int UNUSED(cipher), const unsigned char* UNUSED(IV),
 
 /* Remember to add new ciphers/hashes to regciphers/reghashes too */
 
-#ifdef DROPBEAR_AES256
-static const struct dropbear_cipher dropbear_aes256 = 
-	{&aes_desc, 32, 16};
-#endif
 #ifdef DROPBEAR_AES128
 static const struct dropbear_cipher dropbear_aes128 = 
 	{&aes_desc, 16, 16};
@@ -64,14 +58,6 @@ static const struct dropbear_cipher dropbear_aes128 =
 #ifdef DROPBEAR_BLOWFISH
 static const struct dropbear_cipher dropbear_blowfish = 
 	{&blowfish_desc, 16, 8};
-#endif
-#ifdef DROPBEAR_TWOFISH256
-static const struct dropbear_cipher dropbear_twofish256 = 
-	{&twofish_desc, 32, 16};
-#endif
-#ifdef DROPBEAR_TWOFISH128
-static const struct dropbear_cipher dropbear_twofish128 = 
-	{&twofish_desc, 16, 16};
 #endif
 #ifdef DROPBEAR_3DES
 static const struct dropbear_cipher dropbear_3des = 
@@ -115,14 +101,6 @@ static const struct dropbear_hash dropbear_sha1 =
 static const struct dropbear_hash dropbear_sha1_96 = 
 	{&sha1_desc, 20, 12};
 #endif
-#ifdef DROPBEAR_SHA2_256_HMAC
-static const struct dropbear_hash dropbear_sha2_256 = 
-	{&sha256_desc, 32, 32};
-#endif
-#ifdef DROPBEAR_SHA2_512_HMAC
-static const struct dropbear_hash dropbear_sha2_512 =
-	{&sha512_desc, 64, 64};
-#endif
 #ifdef DROPBEAR_MD5_HMAC
 static const struct dropbear_hash dropbear_md5 = 
 	{&md5_desc, 16, 16};
@@ -141,33 +119,11 @@ algo_type sshciphers[] = {
 #ifdef DROPBEAR_AES128
 	{"aes128-ctr", 0, &dropbear_aes128, 1, &dropbear_mode_ctr},
 #endif
-#ifdef DROPBEAR_AES256
-	{"aes256-ctr", 0, &dropbear_aes256, 1, &dropbear_mode_ctr},
-#endif
-#ifdef DROPBEAR_TWOFISH_CTR
-/* twofish ctr is conditional as it hasn't been tested for interoperability, see options.h */
-#ifdef DROPBEAR_TWOFISH256
-	{"twofish256-ctr", 0, &dropbear_twofish256, 1, &dropbear_mode_ctr},
-#endif
-#ifdef DROPBEAR_TWOFISH128
-	{"twofish128-ctr", 0, &dropbear_twofish128, 1, &dropbear_mode_ctr},
-#endif
-#endif /* DROPBEAR_TWOFISH_CTR */
 #endif /* DROPBEAR_ENABLE_CTR_MODE */
 
 #ifdef DROPBEAR_ENABLE_CBC_MODE
 #ifdef DROPBEAR_AES128
 	{"aes128-cbc", 0, &dropbear_aes128, 1, &dropbear_mode_cbc},
-#endif
-#ifdef DROPBEAR_AES256
-	{"aes256-cbc", 0, &dropbear_aes256, 1, &dropbear_mode_cbc},
-#endif
-#ifdef DROPBEAR_TWOFISH256
-	{"twofish256-cbc", 0, &dropbear_twofish256, 1, &dropbear_mode_cbc},
-	{"twofish-cbc", 0, &dropbear_twofish256, 1, &dropbear_mode_cbc},
-#endif
-#ifdef DROPBEAR_TWOFISH128
-	{"twofish128-cbc", 0, &dropbear_twofish128, 1, &dropbear_mode_cbc},
 #endif
 #ifdef DROPBEAR_3DES
 	{"3des-ctr", 0, &dropbear_3des, 1, &dropbear_mode_ctr},
@@ -192,12 +148,6 @@ algo_type sshhashes[] = {
 #ifdef DROPBEAR_SHA1_HMAC
 	{"hmac-sha1", 0, &dropbear_sha1, 1, NULL},
 #endif
-#ifdef DROPBEAR_SHA2_256_HMAC
-	{"hmac-sha2-256", 0, &dropbear_sha2_256, 1, NULL},
-#endif
-#ifdef DROPBEAR_SHA2_512_HMAC
-	{"hmac-sha2-512", 0, &dropbear_sha2_512, 1, NULL},
-#endif
 #ifdef DROPBEAR_MD5_HMAC
 	{"hmac-md5", 0, (void*)&dropbear_md5, 1, NULL},
 #endif
@@ -207,38 +157,12 @@ algo_type sshhashes[] = {
 	{NULL, 0, NULL, 0, NULL}
 };
 
-#ifndef DISABLE_ZLIB
-algo_type ssh_compress[] = {
-	{"zlib@openssh.com", DROPBEAR_COMP_ZLIB_DELAY, NULL, 1, NULL},
-	{"zlib", DROPBEAR_COMP_ZLIB, NULL, 1, NULL},
-	{"none", DROPBEAR_COMP_NONE, NULL, 1, NULL},
-	{NULL, 0, NULL, 0, NULL}
-};
-
-algo_type ssh_delaycompress[] = {
-	{"zlib@openssh.com", DROPBEAR_COMP_ZLIB_DELAY, NULL, 1, NULL},
-	{"none", DROPBEAR_COMP_NONE, NULL, 1, NULL},
-	{NULL, 0, NULL, 0, NULL}
-};
-#endif
-
 algo_type ssh_nocompress[] = {
 	{"none", DROPBEAR_COMP_NONE, NULL, 1, NULL},
 	{NULL, 0, NULL, 0, NULL}
 };
 
 algo_type sshhostkey[] = {
-#ifdef DROPBEAR_ECDSA
-#ifdef DROPBEAR_ECC_256
-	{"ecdsa-sha2-nistp256", DROPBEAR_SIGNKEY_ECDSA_NISTP256, NULL, 1, NULL},
-#endif
-#ifdef DROPBEAR_ECC_384
-	{"ecdsa-sha2-nistp384", DROPBEAR_SIGNKEY_ECDSA_NISTP384, NULL, 1, NULL},
-#endif
-#ifdef DROPBEAR_ECC_521
-	{"ecdsa-sha2-nistp521", DROPBEAR_SIGNKEY_ECDSA_NISTP521, NULL, 1, NULL},
-#endif
-#endif
 #ifdef DROPBEAR_RSA
 	{"ssh-rsa", DROPBEAR_SIGNKEY_RSA, NULL, 1, NULL},
 #endif
@@ -253,59 +177,14 @@ static const struct dropbear_kex kex_dh_group1 = {DROPBEAR_KEX_NORMAL_DH, dh_p_1
 #endif
 #if DROPBEAR_DH_GROUP14
 static const struct dropbear_kex kex_dh_group14_sha1 = {DROPBEAR_KEX_NORMAL_DH, dh_p_14, DH_P_14_LEN, NULL, &sha1_desc };
-#if DROPBEAR_DH_GROUP14_256
-static const struct dropbear_kex kex_dh_group14_sha256 = {DROPBEAR_KEX_NORMAL_DH, dh_p_14, DH_P_14_LEN, NULL, &sha256_desc };
-#endif
-#endif
-#if DROPBEAR_DH_GROUP16
-static const struct dropbear_kex kex_dh_group16_sha512 = {DROPBEAR_KEX_NORMAL_DH, dh_p_16, DH_P_16_LEN, NULL, &sha512_desc };
-#endif
-
-/* These can't be const since dropbear_ecc_fill_dp() fills out
- ecc_curve at runtime */
-#ifdef DROPBEAR_ECDH
-#ifdef DROPBEAR_ECC_256
-static const struct dropbear_kex kex_ecdh_nistp256 = {DROPBEAR_KEX_ECDH, NULL, 0, &ecc_curve_nistp256, &sha256_desc };
-#endif
-#ifdef DROPBEAR_ECC_384
-static const struct dropbear_kex kex_ecdh_nistp384 = {DROPBEAR_KEX_ECDH, NULL, 0, &ecc_curve_nistp384, &sha384_desc };
-#endif
-#ifdef DROPBEAR_ECC_521
-static const struct dropbear_kex kex_ecdh_nistp521 = {DROPBEAR_KEX_ECDH, NULL, 0, &ecc_curve_nistp521, &sha512_desc };
-#endif
-#endif /* DROPBEAR_ECDH */
-
-#ifdef DROPBEAR_CURVE25519
-/* Referred to directly */
-static const struct dropbear_kex kex_curve25519 = {DROPBEAR_KEX_CURVE25519, NULL, 0, NULL, &sha256_desc };
 #endif
 
 algo_type sshkex[] = {
-#ifdef DROPBEAR_CURVE25519
-	{"curve25519-sha256@libssh.org", 0, &kex_curve25519, 1, NULL},
-#endif
-#ifdef DROPBEAR_ECDH
-#ifdef DROPBEAR_ECC_521
-	{"ecdh-sha2-nistp521", 0, &kex_ecdh_nistp521, 1, NULL},
-#endif
-#ifdef DROPBEAR_ECC_384
-	{"ecdh-sha2-nistp384", 0, &kex_ecdh_nistp384, 1, NULL},
-#endif
-#ifdef DROPBEAR_ECC_256
-	{"ecdh-sha2-nistp256", 0, &kex_ecdh_nistp256, 1, NULL},
-#endif
-#endif
 #if DROPBEAR_DH_GROUP14
-#if DROPBEAR_DH_GROUP14_256
-	{"diffie-hellman-group14-sha256", 0, &kex_dh_group14_sha256, 1, NULL},
-#endif
 	{"diffie-hellman-group14-sha1", 0, &kex_dh_group14_sha1, 1, NULL},
 #endif
 #if DROPBEAR_DH_GROUP1
 	{"diffie-hellman-group1-sha1", 0, &kex_dh_group1, 1, NULL},
-#endif
-#if DROPBEAR_DH_GROUP16
-	{"diffie-hellman-group16-sha512", 0, &kex_dh_group16_sha512, 1, NULL},
 #endif
 #ifdef USE_KEXGUESS2
 	{KEXGUESS2_ALGO_NAME, KEXGUESS2_ALGO_ID, NULL, 1, NULL},
@@ -419,17 +298,10 @@ algo_type * buf_match_algo(buffer* buf, algo_type localalgos[],
 	}
 	localcount = i;
 
-	if (IS_DROPBEAR_SERVER) {
-		clinames = remotenames;
-		clicount = remotecount;
-		servnames = localnames;
-		servcount = localcount;
-	} else {
-		clinames = localnames;
-		clicount = localcount;
-		servnames = remotenames;
-		servcount = remotecount;
-	}
+	clinames = remotenames;
+	clicount = remotecount;
+	servnames = localnames;
+	servcount = localcount;
 
 	/* iterate and find the first match */
 	for (i = 0; i < clicount; i++) {
@@ -453,11 +325,7 @@ algo_type * buf_match_algo(buffer* buf, algo_type localalgos[],
 					}
 				}
 				/* set the algo to return */
-				if (IS_DROPBEAR_SERVER) {
-					ret = &localalgos[j];
-				} else {
-					ret = &localalgos[i];
-				}
+				ret = &localalgos[j];
 				goto out;
 			}
 		}
@@ -499,82 +367,3 @@ get_algo_usable(algo_type algos[], const char * algo_name)
 }
 
 #endif /* DROPBEAR_NONE_CIPHER */
-
-#ifdef ENABLE_USER_ALGO_LIST
-
-char *
-algolist_string(algo_type algos[])
-{
-	char *ret_list;
-	buffer *b = buf_new(200);
-	buf_put_algolist(b, algos);
-	buf_setpos(b, b->len);
-	buf_putbyte(b, '\0');
-	buf_setpos(b, 4);
-	ret_list = m_strdup((const char *) buf_getptr(b, b->len - b->pos));
-	buf_free(b);
-	return ret_list;
-}
-
-static algo_type*
-check_algo(const char* algo_name, algo_type *algos)
-{
-	algo_type *a;
-	for (a = algos; a->name != NULL; a++)
-	{
-		if (strcmp(a->name, algo_name) == 0)
-		{
-			return a;
-		}
-	}
-
-	return NULL;
-}
-
-/* Checks a user provided comma-separated algorithm list for available
- * options. Any that are not acceptable are removed in-place. Returns the
- * number of valid algorithms. */
-int
-check_user_algos(const char* user_algo_list, algo_type * algos, 
-		const char *algo_desc)
-{
-	algo_type new_algos[MAX_PROPOSED_ALGO+1];
-	char *work_list = m_strdup(user_algo_list);
-	char *start = work_list;
-	char *c;
-	int n;
-	/* So we can iterate and look for null terminator */
-	memset(new_algos, 0x0, sizeof(new_algos));
-	for (c = work_list, n = 0; ; c++)
-	{
-		char oc = *c;
-		if (n >= MAX_PROPOSED_ALGO) {
-			dropbear_exit("Too many algorithms '%s'", user_algo_list);
-		}
-		if (*c == ',' || *c == '\0') {
-			algo_type *match_algo = NULL;
-			*c = '\0';
-			match_algo = check_algo(start, algos);
-			if (match_algo) {
-				if (check_algo(start, new_algos)) {
-					TRACE(("Skip repeated algorithm '%s'", start))
-				} else {
-					new_algos[n] = *match_algo;
-					n++;
-				}
-			} else {
-				dropbear_log(LOG_WARNING, "This Dropbear program does not support '%s' %s algorithm", start, algo_desc);
-			}
-			c++;
-			start = c;
-		}
-		if (oc == '\0') {
-			break;
-		}
-	}
-	m_free(work_list);
-	/* n+1 to include a null terminator */
-	memcpy(algos, new_algos, sizeof(*new_algos) * (n+1));
-	return n;
-}
-#endif /* ENABLE_USER_ALGO_LIST */

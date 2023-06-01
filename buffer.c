@@ -225,20 +225,6 @@ char* buf_getstring(buffer* buf, unsigned int *retlen) {
 	return ret;
 }
 
-/* Return a string as a newly allocated buffer */
-buffer * buf_getstringbuf(buffer *buf) {
-	buffer *ret = NULL;
-	unsigned int len = buf_getint(buf);
-	if (len > MAX_STRING_LEN) {
-		dropbear_exit("String too long");
-	}
-	ret = buf_new(len);
-	memcpy(buf_getwriteptr(ret, len), buf_getptr(buf, len), len);
-	buf_incrpos(buf, len);
-	buf_incrlen(ret, len);
-	return ret;
-}
-
 /* Just increment the buffer position the same as if we'd used buf_getstring,
  * but don't bother copying/malloc()ing for it */
 void buf_eatstring(buffer *buf) {

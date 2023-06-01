@@ -39,7 +39,7 @@ static int donerandinit = 0;
 
 #define INIT_SEED_SIZE 32 /* 256 bits */
 
-/* The basic setup is we read some data from /dev/(u)random or prngd and hash it
+/* The basic setup is we read some data from /dev/(u)random and hash it
  * into hashpool. To read data, we hash together current hashpool contents,
  * and a counter. We feed more data in by hashing the current pool and new
  * data into the pool.
@@ -51,25 +51,14 @@ static int donerandinit = 0;
 
 /* Pass len=0 to hash an entire file */
 static int
-process_file(hash_state *hs, const char *filename,
-		unsigned int len, int prngd)
+process_file(hash_state *hs, const char *filename, unsigned int len)
 {
 	static int already_blocked = 0;
 	int readfd;
 	unsigned int readcount;
 	int ret = DROPBEAR_FAILURE;
 
-#ifdef DROPBEAR_PRNGD_SOCKET
-	if (prngd)
-	{
-		readfd = connect_unix(filename);
-	}
-	else
-#endif
-	{
-		readfd = open(filename, O_RDONLY);
-	}
-
+	readfd = open(filename, O_RDONLY);
 	if (readfd < 0) {
 		goto out;
 	}
@@ -79,7 +68,7 @@ process_file(hash_state *hs, const char *filename,
 	{
 		int readlen, wantread;
 		unsigned char readbuf[4096];
-		if (!already_blocked && !prngd)
+		if (!already_blocked)
 		{
 			int res;
 			struct timeval timeout;
@@ -106,19 +95,6 @@ process_file(hash_state *hs, const char *filename,
 		{
 			wantread = MIN(sizeof(readbuf), len-readcount);
 		}
-
-#ifdef DROPBEAR_PRNGD_SOCKET
-		if (prngd)
-		{
-			char egdcmd[2];
-			egdcmd[0] = 0x02;	/* blocking read */
-			egdcmd[1] = (unsigned char)wantread;
-			if (write(readfd, egdcmd, 2) < 0)
-			{
-				dropbear_exit("Can't send command to egd");
-			}
-		}
-#endif
 
 		readlen = read(readfd, readbuf, wantread);
 		if (readlen <= 0) {
@@ -157,7 +133,6 @@ void addrandom(unsigned char * buf, unsigned int len)
 
 static void write_urandom()
 {
-#ifndef DROPBEAR_PRNGD_SOCKET
 	/* This is opportunistic, don't worry about failure */
 	unsigned char buf[INIT_SEED_SIZE];
 	FILE *f = fopen(DROPBEAR_URANDOM_DEV, "w");
@@ -167,10 +142,9 @@ static void write_urandom()
 	genrandom(buf, sizeof(buf));
 	fwrite(buf, sizeof(buf), 1, f);
 	fclose(f);
-#endif
 }
 
-/* Initialise the prng from /dev/urandom or prngd. This function can
+/* Initialise the prng from /dev/urandom. This function can
  * be called multiple times */
 void seedrandom() {
 		
@@ -185,41 +159,33 @@ void seedrandom() {
 	/* existing state */
 	sha1_process(&hs, (void*)hashpool, sizeof(hashpool));
 
-#ifdef DROPBEAR_PRNGD_SOCKET
-	if (process_file(&hs, DROPBEAR_PRNGD_SOCKET, INIT_SEED_SIZE, 1) 
-			!= DROPBEAR_SUCCESS) {
-		dropbear_exit("Failure reading random device %s", 
-				DROPBEAR_PRNGD_SOCKET);
-	}
-#else
 	/* non-blocking random source (probably /dev/urandom) */
-	if (process_file(&hs, DROPBEAR_URANDOM_DEV, INIT_SEED_SIZE, 0) 
+	if (process_file(&hs, DROPBEAR_URANDOM_DEV, INIT_SEED_SIZE) 
 			!= DROPBEAR_SUCCESS) {
 		dropbear_exit("Failure reading random device %s", 
 				DROPBEAR_URANDOM_DEV);
 	}
-#endif
 
 	/* A few other sources to fall back on. 
 	 * Add more here for other platforms */
 #ifdef __linux__
 	/* Seems to be a reasonable source of entropy from timers. Possibly hard
 	 * for even local attackers to reproduce */
-	process_file(&hs, "/proc/timer_list", 0, 0);
+	process_file(&hs, "/proc/timer_list", 0);
 	/* Might help on systems with wireless */
-	process_file(&hs, "/proc/interrupts", 0, 0);
+	process_file(&hs, "/proc/interrupts", 0);
 
-	process_file(&hs, "/proc/loadavg", 0, 0);
-	process_file(&hs, "/proc/sys/kernel/random/entropy_avail", 0, 0);
+	process_file(&hs, "/proc/loadavg", 0);
+	process_file(&hs, "/proc/sys/kernel/random/entropy_avail", 0);
 
 	/* Mostly network visible but useful in some situations.
 	 * Limit size to avoid slowdowns on systems with lots of routes */
-	process_file(&hs, "/proc/net/netstat", 4096, 0);
-	process_file(&hs, "/proc/net/dev", 4096, 0);
-	process_file(&hs, "/proc/net/tcp", 4096, 0);
+	process_file(&hs, "/proc/net/netstat", 4096);
+	process_file(&hs, "/proc/net/dev", 4096);
+	process_file(&hs, "/proc/net/tcp", 4096);
 	/* Also includes interface lo */
-	process_file(&hs, "/proc/net/rt_cache", 4096, 0);
-	process_file(&hs, "/proc/vmstat", 0, 0);
+	process_file(&hs, "/proc/net/rt_cache", 4096);
+	process_file(&hs, "/proc/vmstat", 0);
 #endif
 
 	pid = getpid();

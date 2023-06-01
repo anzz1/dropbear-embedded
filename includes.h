@@ -161,8 +161,6 @@ typedef u_int32_t uint32_t;
 #include <linux/pkt_sched.h>
 #endif
 
-#include "fake-rfc2553.h"
-
 #ifndef LOG_AUTHPRIV
 #define LOG_AUTHPRIV LOG_AUTH
 #endif

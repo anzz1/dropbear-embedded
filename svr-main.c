@@ -43,12 +43,7 @@ static void main_noinetd(void);
 #endif
 static void commonsetup(void);
 
-#if defined(DBMULTI_dropbear) || !defined(DROPBEAR_MULTI)
-#if defined(DBMULTI_dropbear) && defined(DROPBEAR_MULTI)
-int dropbear_main(int argc, char ** argv)
-#else
 int main(int argc, char ** argv)
-#endif
 {
 	_dropbear_exit = svr_dropbear_exit;
 	_dropbear_log = svr_dropbear_log;
@@ -74,7 +69,6 @@ int main(int argc, char ** argv)
 	dropbear_exit("Compiled without normal mode, can't run without -i\n");
 	return -1;
 }
-#endif
 
 #ifdef INETD_MODE
 static void main_inetd() {

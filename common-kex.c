@@ -35,15 +35,11 @@
 #include "bignum.h"
 #include "dbrandom.h"
 #include "runopts.h"
-#include "ecc.h"
+// #include "ecc.h"
 #include "crypto_desc.h"
 
 static void kexinitialise(void);
 static void gen_new_keys(void);
-#ifndef DISABLE_ZLIB
-static void gen_new_zstream_recv(void);
-static void gen_new_zstream_trans(void);
-#endif
 static void read_kex_algos(void);
 /* helper function for gen_new_keys */
 static void hashkeys(unsigned char *out, unsigned int outlen, 
@@ -131,18 +127,12 @@ static void switch_keys() {
 	}
 	if (ses.kexstate.recvnewkeys && ses.newkeys->recv.valid) {
 		TRACE(("switch_keys recv"))
-#ifndef DISABLE_ZLIB
-		gen_new_zstream_recv();
-#endif
 		ses.keys->recv = ses.newkeys->recv;
 		m_burn(&ses.newkeys->recv, sizeof(ses.newkeys->recv));
 		ses.newkeys->recv.valid = 0;
 	}
 	if (ses.kexstate.sentnewkeys && ses.newkeys->trans.valid) {
 		TRACE(("switch_keys trans"))
-#ifndef DISABLE_ZLIB
-		gen_new_zstream_trans();
-#endif
 		ses.keys->trans = ses.newkeys->trans;
 		m_burn(&ses.newkeys->trans, sizeof(ses.newkeys->trans));
 		ses.newkeys->trans.valid = 0;
@@ -197,24 +187,7 @@ void recv_msg_newkeys() {
 void kexfirstinitialise() {
 	ses.kexstate.donefirstkex = 0;
 
-#ifdef DISABLE_ZLIB
 	ses.compress_algos = ssh_nocompress;
-#else
-	switch (opts.compress_mode)
-	{
-		case DROPBEAR_COMPRESS_DELAYED:
-			ses.compress_algos = ssh_delaycompress;
-			break;
-
-		case DROPBEAR_COMPRESS_ON:
-			ses.compress_algos = ssh_compress;
-			break;
-
-		case DROPBEAR_COMPRESS_OFF:
-			ses.compress_algos = ssh_nocompress;
-			break;
-	}
-#endif
 	kexinitialise();
 }
 
@@ -307,21 +280,12 @@ static void gen_new_keys() {
 	buf_free(ses.hash);
 	ses.hash = NULL;
 
-	if (IS_DROPBEAR_CLIENT) {
-		trans_IV	= C2S_IV;
-		recv_IV		= S2C_IV;
-		trans_key	= C2S_key;
-		recv_key	= S2C_key;
-		mactransletter = 'E';
-		macrecvletter = 'F';
-	} else {
-		trans_IV	= S2C_IV;
-		recv_IV		= C2S_IV;
-		trans_key	= S2C_key;
-		recv_key	= C2S_key;
-		mactransletter = 'F';
-		macrecvletter = 'E';
-	}
+	trans_IV	= S2C_IV;
+	recv_IV		= C2S_IV;
+	trans_key	= S2C_key;
+	recv_key	= C2S_key;
+	mactransletter = 'F';
+	macrecvletter = 'E';
 
 	hashkeys(C2S_IV, sizeof(C2S_IV), &hs, 'A');
 	hashkeys(S2C_IV, sizeof(S2C_IV), &hs, 'B');
@@ -377,76 +341,6 @@ static void gen_new_keys() {
 	TRACE(("leave gen_new_keys"))
 }
 
-#ifndef DISABLE_ZLIB
-
-int is_compress_trans() {
-	return ses.keys->trans.algo_comp == DROPBEAR_COMP_ZLIB
-		|| (ses.authstate.authdone
-			&& ses.keys->trans.algo_comp == DROPBEAR_COMP_ZLIB_DELAY);
-}
-
-int is_compress_recv() {
-	return ses.keys->recv.algo_comp == DROPBEAR_COMP_ZLIB
-		|| (ses.authstate.authdone
-			&& ses.keys->recv.algo_comp == DROPBEAR_COMP_ZLIB_DELAY);
-}
-
-/* Set up new zlib compression streams, close the old ones. Only
- * called from gen_new_keys() */
-static void gen_new_zstream_recv() {
-
-	/* create new zstreams */
-	if (ses.newkeys->recv.algo_comp == DROPBEAR_COMP_ZLIB
-			|| ses.newkeys->recv.algo_comp == DROPBEAR_COMP_ZLIB_DELAY) {
-		ses.newkeys->recv.zstream = (z_streamp)m_malloc(sizeof(z_stream));
-		ses.newkeys->recv.zstream->zalloc = Z_NULL;
-		ses.newkeys->recv.zstream->zfree = Z_NULL;
-		
-		if (inflateInit(ses.newkeys->recv.zstream) != Z_OK) {
-			dropbear_exit("zlib error");
-		}
-	} else {
-		ses.newkeys->recv.zstream = NULL;
-	}
-	/* clean up old keys */
-	if (ses.keys->recv.zstream != NULL) {
-		if (inflateEnd(ses.keys->recv.zstream) == Z_STREAM_ERROR) {
-			/* Z_DATA_ERROR is ok, just means that stream isn't ended */
-			dropbear_exit("Crypto error");
-		}
-		m_free(ses.keys->recv.zstream);
-	}
-}
-
-static void gen_new_zstream_trans() {
-
-	if (ses.newkeys->trans.algo_comp == DROPBEAR_COMP_ZLIB
-			|| ses.newkeys->trans.algo_comp == DROPBEAR_COMP_ZLIB_DELAY) {
-		ses.newkeys->trans.zstream = (z_streamp)m_malloc(sizeof(z_stream));
-		ses.newkeys->trans.zstream->zalloc = Z_NULL;
-		ses.newkeys->trans.zstream->zfree = Z_NULL;
-	
-		if (deflateInit2(ses.newkeys->trans.zstream, Z_DEFAULT_COMPRESSION,
-					Z_DEFLATED, DROPBEAR_ZLIB_WINDOW_BITS, 
-					DROPBEAR_ZLIB_MEM_LEVEL, Z_DEFAULT_STRATEGY)
-				!= Z_OK) {
-			dropbear_exit("zlib error");
-		}
-	} else {
-		ses.newkeys->trans.zstream = NULL;
-	}
-
-	if (ses.keys->trans.zstream != NULL) {
-		if (deflateEnd(ses.keys->trans.zstream) == Z_STREAM_ERROR) {
-			/* Z_DATA_ERROR is ok, just means that stream isn't ended */
-			dropbear_exit("Crypto error");
-		}
-		m_free(ses.keys->trans.zstream);
-	}
-}
-#endif /* DISABLE_ZLIB */
-
-
 /* Executed upon receiving a kexinit message from the client to initiate
  * key exchange. If we haven't already done so, we send the list of our
  * preferred algorithms. The client's requested algorithms are processed,
@@ -478,47 +372,26 @@ void recv_msg_kexinit() {
 
 	ses.kexhashbuf = buf_new(kexhashbuf_len);
 
-	if (IS_DROPBEAR_CLIENT) {
+	/* SERVER */
 
-		/* read the peer's choice of algos */
-		read_kex_algos();
+	/* read the peer's choice of algos */
+	read_kex_algos();
+	/* V_C, the client's version string (CR and NL excluded) */
+	buf_putstring(ses.kexhashbuf, ses.remoteident, remote_ident_len);
+	/* V_S, the server's version string (CR and NL excluded) */
+	buf_putstring(ses.kexhashbuf, LOCAL_IDENT, local_ident_len);
 
-		/* V_C, the client's version string (CR and NL excluded) */
-		buf_putstring(ses.kexhashbuf, LOCAL_IDENT, local_ident_len);
-		/* V_S, the server's version string (CR and NL excluded) */
-		buf_putstring(ses.kexhashbuf, ses.remoteident, remote_ident_len);
+	/* I_C, the payload of the client's SSH_MSG_KEXINIT */
+	buf_setpos(ses.payload, ses.payload_beginning);
+	buf_putstring(ses.kexhashbuf, 
+		(const char*)buf_getptr(ses.payload, ses.payload->len-ses.payload->pos),
+		ses.payload->len-ses.payload->pos);
 
-		/* I_C, the payload of the client's SSH_MSG_KEXINIT */
-		buf_putstring(ses.kexhashbuf,
-			(const char*)ses.transkexinit->data, ses.transkexinit->len);
-		/* I_S, the payload of the server's SSH_MSG_KEXINIT */
-		buf_setpos(ses.payload, ses.payload_beginning);
-		buf_putstring(ses.kexhashbuf,
-			(const char*)buf_getptr(ses.payload, ses.payload->len-ses.payload->pos),
-			ses.payload->len-ses.payload->pos);
-		ses.requirenext = SSH_MSG_KEXDH_REPLY;
-	} else {
-		/* SERVER */
+	/* I_S, the payload of the server's SSH_MSG_KEXINIT */
+	buf_putstring(ses.kexhashbuf,
+		(const char*)ses.transkexinit->data, ses.transkexinit->len);
 
-		/* read the peer's choice of algos */
-		read_kex_algos();
-		/* V_C, the client's version string (CR and NL excluded) */
-		buf_putstring(ses.kexhashbuf, ses.remoteident, remote_ident_len);
-		/* V_S, the server's version string (CR and NL excluded) */
-		buf_putstring(ses.kexhashbuf, LOCAL_IDENT, local_ident_len);
-
-		/* I_C, the payload of the client's SSH_MSG_KEXINIT */
-		buf_setpos(ses.payload, ses.payload_beginning);
-		buf_putstring(ses.kexhashbuf, 
-			(const char*)buf_getptr(ses.payload, ses.payload->len-ses.payload->pos),
-			ses.payload->len-ses.payload->pos);
-
-		/* I_S, the payload of the server's SSH_MSG_KEXINIT */
-		buf_putstring(ses.kexhashbuf,
-			(const char*)ses.transkexinit->data, ses.transkexinit->len);
-
-		ses.requirenext = SSH_MSG_KEXDH_INIT;
-	}
+	ses.requirenext = SSH_MSG_KEXDH_INIT;
 
 	buf_free(ses.transkexinit);
 	ses.transkexinit = NULL;
@@ -618,13 +491,8 @@ void kexdh_comb_key(struct kex_dh_param *param, mp_int *dh_pub_them,
 
 	/* From here on, the code needs to work with the _same_ vars on each side,
 	 * not vice-versaing for client/server */
-	if (IS_DROPBEAR_CLIENT) {
-		dh_e = &param->pub;
-		dh_f = dh_pub_them;
-	} else {
-		dh_e = dh_pub_them;
-		dh_f = &param->pub;
-	} 
+	dh_e = dh_pub_them;
+	dh_f = &param->pub;
 
 	/* Create the remainder of the hash buffer, to generate the exchange hash */
 	/* K_S, the host key */
@@ -639,128 +507,6 @@ void kexdh_comb_key(struct kex_dh_param *param, mp_int *dh_pub_them,
 	/* calculate the hash H to sign */
 	finish_kexhashbuf();
 }
-
-#ifdef DROPBEAR_ECDH
-struct kex_ecdh_param *gen_kexecdh_param() {
-	struct kex_ecdh_param *param = m_malloc(sizeof(*param));
-	if (ecc_make_key_ex(NULL, dropbear_ltc_prng, 
-		&param->key, ses.newkeys->algo_kex->ecc_curve->dp) != CRYPT_OK) {
-		dropbear_exit("ECC error");
-	}
-	return param;
-}
-
-void free_kexecdh_param(struct kex_ecdh_param *param) {
-	ecc_free(&param->key);
-	m_free(param);
-
-}
-void kexecdh_comb_key(struct kex_ecdh_param *param, buffer *pub_them,
-		sign_key *hostkey) {
-	const struct dropbear_kex *algo_kex = ses.newkeys->algo_kex;
-	/* public keys from client and server */
-	ecc_key *Q_C, *Q_S, *Q_them;
-
-	Q_them = buf_get_ecc_raw_pubkey(pub_them, algo_kex->ecc_curve);
-	if (Q_them == NULL) {
-		dropbear_exit("ECC error");
-	}
-
-	ses.dh_K = dropbear_ecc_shared_secret(Q_them, &param->key);
-
-	/* Create the remainder of the hash buffer, to generate the exchange hash
-	   See RFC5656 section 4 page 7 */
-	if (IS_DROPBEAR_CLIENT) {
-		Q_C = &param->key;
-		Q_S = Q_them;
-	} else {
-		Q_C = Q_them;
-		Q_S = &param->key;
-	} 
-
-	/* K_S, the host key */
-	buf_put_pub_key(ses.kexhashbuf, hostkey, ses.newkeys->algo_hostkey);
-	/* Q_C, client's ephemeral public key octet string */
-	buf_put_ecc_raw_pubkey_string(ses.kexhashbuf, Q_C);
-	/* Q_S, server's ephemeral public key octet string */
-	buf_put_ecc_raw_pubkey_string(ses.kexhashbuf, Q_S);
-	/* K, the shared secret */
-	buf_putmpint(ses.kexhashbuf, ses.dh_K);
-
-	/* calculate the hash H to sign */
-	finish_kexhashbuf();
-}
-#endif /* DROPBEAR_ECDH */
-
-#ifdef DROPBEAR_CURVE25519
-struct kex_curve25519_param *gen_kexcurve25519_param () {
-	/* Per http://cr.yp.to/ecdh.html */
-	struct kex_curve25519_param *param = m_malloc(sizeof(*param));
-	const unsigned char basepoint[32] = {9};
-
-	genrandom(param->priv, CURVE25519_LEN);
-	param->priv[0] &= 248;
-	param->priv[31] &= 127;
-	param->priv[31] |= 64;
-
-	curve25519_donna(param->pub, param->priv, basepoint);
-
-	return param;
-}
-
-void free_kexcurve25519_param(struct kex_curve25519_param *param)
-{
-	m_burn(param->priv, CURVE25519_LEN);
-	m_free(param);
-}
-
-void kexcurve25519_comb_key(struct kex_curve25519_param *param, buffer *buf_pub_them,
-	sign_key *hostkey) {
-	unsigned char out[CURVE25519_LEN];
-	const unsigned char* Q_C = NULL;
-	const unsigned char* Q_S = NULL;
-	char zeroes[CURVE25519_LEN] = {0};
-
-	if (buf_pub_them->len != CURVE25519_LEN)
-	{
-		dropbear_exit("Bad curve25519");
-	}
-
-	curve25519_donna(out, param->priv, buf_pub_them->data);
-
-	if (constant_time_memcmp(zeroes, out, CURVE25519_LEN) == 0) {
-		dropbear_exit("Bad curve25519");
-	}
-
-	m_mp_alloc_init_multi(&ses.dh_K, NULL);
-	bytes_to_mp(ses.dh_K, out, CURVE25519_LEN);
-	m_burn(out, sizeof(out));
-
-	/* Create the remainder of the hash buffer, to generate the exchange hash.
-	   See RFC5656 section 4 page 7 */
-	if (IS_DROPBEAR_CLIENT) {
-		Q_C = param->pub;
-		Q_S = buf_pub_them->data;
-	} else {
-		Q_S = param->pub;
-		Q_C = buf_pub_them->data;
-	}
-
-	/* K_S, the host key */
-	buf_put_pub_key(ses.kexhashbuf, hostkey, ses.newkeys->algo_hostkey);
-	/* Q_C, client's ephemeral public key octet string */
-	buf_putstring(ses.kexhashbuf, (const char*)Q_C, CURVE25519_LEN);
-	/* Q_S, server's ephemeral public key octet string */
-	buf_putstring(ses.kexhashbuf, (const char*)Q_S, CURVE25519_LEN);
-	/* K, the shared secret */
-	buf_putmpint(ses.kexhashbuf, ses.dh_K);
-
-	/* calculate the hash H to sign */
-	finish_kexhashbuf();
-}
-#endif /* DROPBEAR_CURVE25519 */
-
-
 
 static void finish_kexhashbuf(void) {
 	hash_state hs;
@@ -910,38 +656,22 @@ static void read_kex_algos() {
 	}
 
 	/* Handle the asymmetry */
-	if (IS_DROPBEAR_CLIENT) {
-		ses.newkeys->recv.algo_crypt = 
-			(struct dropbear_cipher*)s2c_cipher_algo->data;
-		ses.newkeys->trans.algo_crypt = 
-			(struct dropbear_cipher*)c2s_cipher_algo->data;
-		ses.newkeys->recv.crypt_mode = 
-			(struct dropbear_cipher_mode*)s2c_cipher_algo->mode;
-		ses.newkeys->trans.crypt_mode =
-			(struct dropbear_cipher_mode*)c2s_cipher_algo->mode;
-		ses.newkeys->recv.algo_mac = 
-			(struct dropbear_hash*)s2c_hash_algo->data;
-		ses.newkeys->trans.algo_mac = 
-			(struct dropbear_hash*)c2s_hash_algo->data;
-		ses.newkeys->recv.algo_comp = s2c_comp_algo->val;
-		ses.newkeys->trans.algo_comp = c2s_comp_algo->val;
-	} else {
-		/* SERVER */
-		ses.newkeys->recv.algo_crypt = 
-			(struct dropbear_cipher*)c2s_cipher_algo->data;
-		ses.newkeys->trans.algo_crypt = 
-			(struct dropbear_cipher*)s2c_cipher_algo->data;
-		ses.newkeys->recv.crypt_mode =
-			(struct dropbear_cipher_mode*)c2s_cipher_algo->mode;
-		ses.newkeys->trans.crypt_mode =
-			(struct dropbear_cipher_mode*)s2c_cipher_algo->mode;
-		ses.newkeys->recv.algo_mac = 
-			(struct dropbear_hash*)c2s_hash_algo->data;
-		ses.newkeys->trans.algo_mac = 
-			(struct dropbear_hash*)s2c_hash_algo->data;
-		ses.newkeys->recv.algo_comp = c2s_comp_algo->val;
-		ses.newkeys->trans.algo_comp = s2c_comp_algo->val;
-	}
+
+	/* SERVER */
+	ses.newkeys->recv.algo_crypt = 
+		(struct dropbear_cipher*)c2s_cipher_algo->data;
+	ses.newkeys->trans.algo_crypt = 
+		(struct dropbear_cipher*)s2c_cipher_algo->data;
+	ses.newkeys->recv.crypt_mode =
+		(struct dropbear_cipher_mode*)c2s_cipher_algo->mode;
+	ses.newkeys->trans.crypt_mode =
+		(struct dropbear_cipher_mode*)s2c_cipher_algo->mode;
+	ses.newkeys->recv.algo_mac = 
+		(struct dropbear_hash*)c2s_hash_algo->data;
+	ses.newkeys->trans.algo_mac = 
+		(struct dropbear_hash*)s2c_hash_algo->data;
+	ses.newkeys->recv.algo_comp = c2s_comp_algo->val;
+	ses.newkeys->trans.algo_comp = s2c_comp_algo->val;
 
 	/* reserved for future extensions */
 	buf_getint(ses.payload);

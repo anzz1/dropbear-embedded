@@ -33,12 +33,11 @@
 #include "auth.h"
 #include "channel.h"
 #include "queue.h"
-#include "listener.h"
 #include "packet.h"
-#include "tcpfwd.h"
 #include "chansession.h"
 #include "dbutil.h"
 #include "netio.h"
+#include "list.h"
 
 extern int sessinitdone; /* Is set to 0 somewhere */
 extern int exitflag;
@@ -60,12 +59,6 @@ void svr_session(int sock, int childpipe) ATTRIB_NORETURN;
 void svr_dropbear_exit(int exitcode, const char* format, va_list param) ATTRIB_NORETURN;
 void svr_dropbear_log(int priority, const char* format, va_list param);
 
-/* Client */
-void cli_session(int sock_in, int sock_out, struct dropbear_progress_connection *progress, pid_t proxy_cmd_pid) ATTRIB_NORETURN;
-void cli_connected(int result, int sock, void* userdata, const char *errstring);
-void cleantext(char* dirtytext);
-void kill_proxy_command(void);
-
 /* crypto parameters that are stored individually for transmit and receive */
 struct key_context_directional {
 	const struct dropbear_cipher *algo_crypt;
@@ -73,9 +66,6 @@ struct key_context_directional {
 	const struct dropbear_hash *algo_mac;
 	int hash_index; /* lookup for libtomcrypt */
 	int algo_comp; /* compression */
-#ifndef DISABLE_ZLIB
-	z_streamp zstream;
-#endif
 	/* actual keys */
 	union {
 		symmetric_CBC cbc;
@@ -208,10 +198,6 @@ struct sshsession {
 	/* TCP priority level for the main "port 22" tcp socket */
 	enum dropbear_prio socket_prio;
 
-	/* TCP forwarding - where manage listeners */
-	struct Listener ** listeners;
-	unsigned int listensize;
-
 	/* Whether to allow binding to privileged ports (<1024). This doesn't
 	 * really belong here, but nowhere else fits nicely */
 	int allowprivport;
@@ -243,80 +229,8 @@ struct serversession {
 
 };
 
-typedef enum {
-	KEX_NOTHING,
-	KEXINIT_RCVD,
-	KEXDH_INIT_SENT,
-	KEXDONE
-} cli_kex_state;
-
-typedef enum {
-	STATE_NOTHING,
-	USERAUTH_WAIT,
-	USERAUTH_REQ_SENT,
-	USERAUTH_FAIL_RCVD,
-	USERAUTH_SUCCESS_RCVD,
-	SESSION_RUNNING
-} cli_state;
-
-struct clientsession {
-
-	/* XXX - move these to kexstate? */
-	struct kex_dh_param *dh_param;
-	struct kex_ecdh_param *ecdh_param;
-	struct kex_curve25519_param *curve25519_param;
-	const struct dropbear_kex *param_kex_algo; /* KEX algorithm corresponding to current dh_e and dh_x */
-
-	cli_kex_state kex_state; /* Used for progressing KEX */
-	cli_state state; /* Used to progress auth/channelsession etc */
-	unsigned donefirstkex : 1; /* Set when we set sentnewkeys, never reset */
-
-	int tty_raw_mode; /* Whether we're in raw mode (and have to clean up) */
-	struct termios saved_tio;
-	int stdincopy;
-	int stdinflags;
-	int stdoutcopy;
-	int stdoutflags;
-	int stderrcopy;
-	int stderrflags;
-
-	/* for escape char handling */
-	int last_char;
-
-	int winchange; /* Set to 1 when a windowchange signal happens */
-
-	int lastauthtype; /* either AUTH_TYPE_PUBKEY or AUTH_TYPE_PASSWORD,
-						 for the last type of auth we tried */
-	int ignore_next_auth_response;
-#ifdef ENABLE_CLI_INTERACT_AUTH
-	int auth_interact_failed; /* flag whether interactive auth can still
-								 be used */
-	int interact_request_received; /* flag whether we've received an 
-									  info request from the server for
-									  interactive auth.*/
-#endif
-	int cipher_none_after_auth; /* Set to 1 if the user requested "none"
-								   auth */
-	sign_key *lastprivkey;
-
-	int retval; /* What the command exit status was - we emulate it */
-#if 0
-	TODO
-	struct AgentkeyList *agentkeys; /* Keys to use for public-key auth */
-#endif
-
-	pid_t proxy_cmd_pid;
-};
-
 /* Global structs storing the state */
 extern struct sshsession ses;
-
-#ifdef DROPBEAR_SERVER
 extern struct serversession svr_ses;
-#endif /* DROPBEAR_SERVER */
-
-#ifdef DROPBEAR_CLIENT
-extern struct clientsession cli_ses;
-#endif /* DROPBEAR_CLIENT */
 
 #endif /* DROPBEAR_SESSION_H_ */

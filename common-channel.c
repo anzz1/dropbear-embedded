@@ -33,7 +33,6 @@
 #include "dbutil.h"
 #include "channel.h"
 #include "ssh.h"
-#include "listener.h"
 #include "runopts.h"
 #include "netio.h"
 
@@ -77,11 +76,6 @@ void chaninitialise(const struct ChanType *chantypes[]) {
 	ses.chancount = 0;
 
 	ses.chantypes = chantypes;
-
-#ifdef USING_LISTENERS
-	listeners_initialise();
-#endif
-
 }
 
 /* Clean up channels, freeing allocated memory */
@@ -254,10 +248,6 @@ void channelio(fd_set *readfds, fd_set *writefds) {
 			check_close(channel);
 		}
 	}
-
-#ifdef USING_LISTENERS
-	handle_listeners(readfds);
-#endif
 }
 
 
@@ -594,11 +584,6 @@ void setchannelfds(fd_set *readfds, fd_set *writefds, int allow_reads) {
 		}
 
 	} /* foreach channel */
-
-#ifdef USING_LISTENERS
-	set_listener_fds(readfds);
-#endif
-
 }
 
 /* handle the channel EOF event, by closing the channel filedescriptor. The
@@ -650,17 +635,14 @@ static void remove_channel(struct Channel * channel) {
 		channel->extrabuf = NULL;
 	}
 
-
-	if (IS_DROPBEAR_SERVER || (channel->writefd != STDOUT_FILENO)) {
-		/* close the FDs in case they haven't been done
-		 * yet (they might have been shutdown etc) */
-		TRACE(("CLOSE writefd %d", channel->writefd))
-		m_close(channel->writefd);
-		TRACE(("CLOSE readfd %d", channel->readfd))
-		m_close(channel->readfd);
-		TRACE(("CLOSE errfd %d", channel->errfd))
-		m_close(channel->errfd);
-	}
+	/* close the FDs in case they haven't been done
+	 * yet (they might have been shutdown etc) */
+	TRACE(("CLOSE writefd %d", channel->writefd))
+	m_close(channel->writefd);
+	TRACE(("CLOSE readfd %d", channel->readfd))
+	m_close(channel->readfd);
+	TRACE(("CLOSE errfd %d", channel->errfd))
+	m_close(channel->errfd);
 
 	if (!channel->close_handler_done
 		&& channel->type->closehandler) {
@@ -1112,105 +1094,6 @@ static void close_chan_fd(struct Channel *channel, int fd, int how) {
 		m_close(fd);
 	}
 }
-
-
-#if defined(USING_LISTENERS) || defined(DROPBEAR_CLIENT)
-/* Create a new channel, and start the open request. This is intended
- * for X11, agent, tcp forwarding, and should be filled with channel-specific
- * options, with the calling function calling encrypt_packet() after
- * completion. It is mandatory for the caller to encrypt_packet() if
- * a channel is returned. NULL is returned on failure. */
-int send_msg_channel_open_init(int fd, const struct ChanType *type) {
-
-	struct Channel* chan;
-
-	TRACE(("enter send_msg_channel_open_init()"))
-	chan = newchannel(0, type, 0, 0);
-	if (!chan) {
-		TRACE(("leave send_msg_channel_open_init() - FAILED in newchannel()"))
-		return DROPBEAR_FAILURE;
-	}
-
-	/* Outbound opened channels don't make use of in-progress connections,
-	 * we can set it up straight away */
-
-	/* set fd non-blocking */
-	setnonblocking(fd);
-
-	chan->writefd = chan->readfd = fd;
-	ses.maxfd = MAX(ses.maxfd, fd);
-
-	chan->await_open = 1;
-
-	/* now open the channel connection */
-	CHECKCLEARTOWRITE();
-
-	buf_putbyte(ses.writepayload, SSH_MSG_CHANNEL_OPEN);
-	buf_putstring(ses.writepayload, type->name, strlen(type->name));
-	buf_putint(ses.writepayload, chan->index);
-	buf_putint(ses.writepayload, opts.recv_window);
-	buf_putint(ses.writepayload, RECV_MAX_CHANNEL_DATA_LEN);
-
-	TRACE(("leave send_msg_channel_open_init()"))
-	return DROPBEAR_SUCCESS;
-}
-
-/* Confirmation that our channel open request (for forwardings) was 
- * successful*/
-void recv_msg_channel_open_confirmation() {
-
-	struct Channel * channel;
-	int ret;
-
-	TRACE(("enter recv_msg_channel_open_confirmation"))
-
-	channel = getchannel();
-
-	if (!channel->await_open) {
-		dropbear_exit("Unexpected channel reply");
-	}
-	channel->await_open = 0;
-
-	channel->remotechan =  buf_getint(ses.payload);
-	channel->transwindow = buf_getint(ses.payload);
-	channel->transmaxpacket = buf_getint(ses.payload);
-	
-	TRACE(("new chan remote %d local %d", 
-				channel->remotechan, channel->index))
-
-	/* Run the inithandler callback */
-	if (channel->type->inithandler) {
-		ret = channel->type->inithandler(channel);
-		if (ret > 0) {
-			remove_channel(channel);
-			TRACE(("inithandler returned failure %d", ret))
-			return;
-		}
-	}
-
-	if (channel->prio == DROPBEAR_CHANNEL_PRIO_EARLY) {
-		channel->prio = DROPBEAR_CHANNEL_PRIO_BULK;
-	}
-	update_channel_prio();
-	
-	TRACE(("leave recv_msg_channel_open_confirmation"))
-}
-
-/* Notification that our channel open request failed */
-void recv_msg_channel_open_failure() {
-
-	struct Channel * channel;
-
-	channel = getchannel();
-
-	if (!channel->await_open) {
-		dropbear_exit("Unexpected channel reply");
-	}
-	channel->await_open = 0;
-
-	remove_channel(channel);
-}
-#endif /* USING_LISTENERS */
 
 void send_msg_request_success() {
 	CHECKCLEARTOWRITE();

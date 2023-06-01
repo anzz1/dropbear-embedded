@@ -56,10 +56,7 @@ void svr_authinitialise() {
 static void authclear() {
 	
 	memset(&ses.authstate, 0, sizeof(ses.authstate));
-#ifdef ENABLE_SVR_PUBKEY_AUTH
-	ses.authstate.authtypes |= AUTH_TYPE_PUBKEY;
-#endif
-#if defined(ENABLE_SVR_PASSWORD_AUTH) || defined(ENABLE_SVR_PAM_AUTH)
+#if defined(ENABLE_SVR_PASSWORD_AUTH)
 	if (!svr_opts.noauthpass) {
 		ses.authstate.authtypes |= AUTH_TYPE_PASSWORD;
 	}
@@ -168,49 +165,24 @@ void recv_msg_userauth_request() {
 			goto out;
 		}
 	}
-	
+
 #ifdef ENABLE_SVR_PASSWORD_AUTH
-	if (!svr_opts.noauthpass &&
-			!(svr_opts.norootpass && ses.authstate.pw_uid == 0) ) {
+	if (!svr_opts.noauthpass) {
 		/* user wants to try password auth */
 		if (methodlen == AUTH_METHOD_PASSWORD_LEN &&
 				strncmp(methodname, AUTH_METHOD_PASSWORD,
 					AUTH_METHOD_PASSWORD_LEN) == 0) {
-			if (valid_user) {
+			if ((svr_opts.norootpass && ses.authstate.pw_uid == 0)) {
+				dropbear_log(LOG_WARNING,
+					"Reject root login attempt with password from %s",
+					svr_ses.addrstring);
+				send_msg_userauth_failure(0, 1);
+				goto out;
+			} else if (valid_user) {
 				svr_auth_password();
 				goto out;
 			}
 		}
-	}
-#endif
-
-#ifdef ENABLE_SVR_PAM_AUTH
-	if (!svr_opts.noauthpass &&
-			!(svr_opts.norootpass && ses.authstate.pw_uid == 0) ) {
-		/* user wants to try password auth */
-		if (methodlen == AUTH_METHOD_PASSWORD_LEN &&
-				strncmp(methodname, AUTH_METHOD_PASSWORD,
-					AUTH_METHOD_PASSWORD_LEN) == 0) {
-			if (valid_user) {
-				svr_auth_pam();
-				goto out;
-			}
-		}
-	}
-#endif
-
-#ifdef ENABLE_SVR_PUBKEY_AUTH
-	/* user wants to try pubkey auth */
-	if (methodlen == AUTH_METHOD_PUBKEY_LEN &&
-			strncmp(methodname, AUTH_METHOD_PUBKEY,
-				AUTH_METHOD_PUBKEY_LEN) == 0) {
-		if (valid_user) {
-			svr_auth_pubkey();
-		} else {
-			/* pubkey has no failure delay */
-			send_msg_userauth_failure(0, 0);
-		}
-		goto out;
 	}
 #endif
 
@@ -331,13 +303,6 @@ void send_msg_userauth_failure(int partial, int incrfail) {
 
 	/* put a list of allowed types */
 	typebuf = buf_new(30); /* long enough for PUBKEY and PASSWORD */
-
-	if (ses.authstate.authtypes & AUTH_TYPE_PUBKEY) {
-		buf_putbytes(typebuf, (const unsigned char *)AUTH_METHOD_PUBKEY, AUTH_METHOD_PUBKEY_LEN);
-		if (ses.authstate.authtypes & AUTH_TYPE_PASSWORD) {
-			buf_putbyte(typebuf, ',');
-		}
-	}
 	
 	if (ses.authstate.authtypes & AUTH_TYPE_PASSWORD) {
 		buf_putbytes(typebuf, (const unsigned char *)AUTH_METHOD_PASSWORD, AUTH_METHOD_PASSWORD_LEN);

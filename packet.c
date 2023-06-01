@@ -48,10 +48,6 @@ static int checkmac(void);
  * exact multiple. */
 #define ZLIB_COMPRESS_EXPANSION (((RECV_MAX_PAYLOAD_LEN/16384)+1)*5 + 6)
 #define ZLIB_DECOMPRESS_INCR 1024
-#ifndef DISABLE_ZLIB
-static buffer* buf_decompress(buffer* buf, unsigned int len);
-static void buf_compress(buffer * dest, buffer * src, unsigned int len);
-#endif
 
 /* non-blocking function writing out a current encrypted packet */
 void write_packet() {
@@ -318,15 +314,6 @@ void decrypt_packet() {
 
 	buf_setpos(ses.readbuf, PACKET_PAYLOAD_OFF);
 
-#ifndef DISABLE_ZLIB
-	if (is_compress_recv()) {
-		/* decompress */
-		ses.payload = buf_decompress(ses.readbuf, len);
-		buf_setpos(ses.payload, 0);
-		ses.payload_beginning = 0;
-		buf_free(ses.readbuf);
-	} else 
-#endif
 	{
 		ses.payload = ses.readbuf;
 		ses.payload_beginning = ses.payload->pos;
@@ -364,57 +351,6 @@ static int checkmac() {
 		return DROPBEAR_SUCCESS;
 	}
 }
-
-#ifndef DISABLE_ZLIB
-/* returns a pointer to a newly created buffer */
-static buffer* buf_decompress(buffer* buf, unsigned int len) {
-
-	int result;
-	buffer * ret;
-	z_streamp zstream;
-
-	zstream = ses.keys->recv.zstream;
-	ret = buf_new(len);
-
-	zstream->avail_in = len;
-	zstream->next_in = buf_getptr(buf, len);
-
-	/* decompress the payload, incrementally resizing the output buffer */
-	while (1) {
-
-		zstream->avail_out = ret->size - ret->pos;
-		zstream->next_out = buf_getwriteptr(ret, zstream->avail_out);
-
-		result = inflate(zstream, Z_SYNC_FLUSH);
-
-		buf_setlen(ret, ret->size - zstream->avail_out);
-		buf_setpos(ret, ret->len);
-
-		if (result != Z_BUF_ERROR && result != Z_OK) {
-			dropbear_exit("zlib error");
-		}
-
-		if (zstream->avail_in == 0 &&
-		   		(zstream->avail_out != 0 || result == Z_BUF_ERROR)) {
-			/* we can only exit if avail_out hasn't all been used,
-			 * and there's no remaining input */
-			return ret;
-		}
-
-		if (zstream->avail_out == 0) {
-			int new_size = 0;
-			if (ret->size >= RECV_MAX_PAYLOAD_LEN) {
-				/* Already been increased as large as it can go,
-				 * yet didn't finish up the decompression */
-				dropbear_exit("bad packet, oversized decompressed");
-			}
-			new_size = MIN(RECV_MAX_PAYLOAD_LEN, ret->size + ZLIB_DECOMPRESS_INCR);
-			ret = buf_resize(ret, new_size);
-		}
-	}
-}
-#endif
-
 
 /* returns 1 if the packet is a valid type during kex (see 7.1 of rfc4253) */
 static int packet_is_okay_kex(unsigned char type) {
@@ -510,10 +446,6 @@ void encrypt_packet() {
 		+ MAX(MIN_PACKET_LEN, blocksize) + 3
 	/* add space for the MAC at the end */
 				+ mac_size
-#ifndef DISABLE_ZLIB
-	/* some extra in case 'compression' makes it larger */
-				+ ZLIB_COMPRESS_EXPANSION
-#endif
 	/* and an extra cleartext (stripped before transmission) byte for the
 	 * packet type */
 				+ 1;
@@ -522,12 +454,6 @@ void encrypt_packet() {
 	buf_setlen(writebuf, PACKET_PAYLOAD_OFF);
 	buf_setpos(writebuf, PACKET_PAYLOAD_OFF);
 
-#ifndef DISABLE_ZLIB
-	/* compression */
-	if (is_compress_trans()) {
-		buf_compress(writebuf, ses.writepayload, ses.writepayload->len);
-	} else
-#endif
 	{
 		memcpy(buf_getwriteptr(writebuf, ses.writepayload->len),
 				buf_getptr(ses.writepayload, ses.writepayload->len),
@@ -652,40 +578,3 @@ static void make_mac(unsigned int seqno, const struct key_context_directional * 
 	}
 	TRACE2(("leave writemac"))
 }
-
-#ifndef DISABLE_ZLIB
-/* compresses len bytes from src, outputting to dest (starting from the
- * respective current positions. dest must have sufficient space,
- * len+ZLIB_COMPRESS_EXPANSION */
-static void buf_compress(buffer * dest, buffer * src, unsigned int len) {
-
-	unsigned int endpos = src->pos + len;
-	int result;
-
-	TRACE2(("enter buf_compress"))
-
-	dropbear_assert(dest->size - dest->pos >= len+ZLIB_COMPRESS_EXPANSION);
-
-	ses.keys->trans.zstream->avail_in = endpos - src->pos;
-	ses.keys->trans.zstream->next_in = 
-		buf_getptr(src, ses.keys->trans.zstream->avail_in);
-
-	ses.keys->trans.zstream->avail_out = dest->size - dest->pos;
-	ses.keys->trans.zstream->next_out =
-		buf_getwriteptr(dest, ses.keys->trans.zstream->avail_out);
-
-	result = deflate(ses.keys->trans.zstream, Z_SYNC_FLUSH);
-
-	buf_setpos(src, endpos - ses.keys->trans.zstream->avail_in);
-	buf_setlen(dest, dest->size - ses.keys->trans.zstream->avail_out);
-	buf_setpos(dest, dest->len);
-
-	if (result != Z_OK) {
-		dropbear_exit("zlib error");
-	}
-
-	/* fails if destination buffer wasn't large enough */
-	dropbear_assert(ses.keys->trans.zstream->avail_in == 0);
-	TRACE2(("leave buf_compress"))
-}
-#endif

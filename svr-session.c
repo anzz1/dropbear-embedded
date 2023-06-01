@@ -35,7 +35,6 @@
 #include "channel.h"
 #include "chansession.h"
 #include "atomicio.h"
-#include "tcpfwd.h"
 #include "service.h"
 #include "auth.h"
 #include "runopts.h"
@@ -53,7 +52,7 @@ static const packettype svr_packettypes[] = {
 	{SSH_MSG_KEXINIT, recv_msg_kexinit},
 	{SSH_MSG_KEXDH_INIT, recv_msg_kexdh_init}, /* server */
 	{SSH_MSG_NEWKEYS, recv_msg_newkeys},
-	{SSH_MSG_GLOBAL_REQUEST, recv_msg_global_request_remotetcp},
+	{SSH_MSG_GLOBAL_REQUEST, send_msg_request_failure},
 	{SSH_MSG_CHANNEL_REQUEST, recv_msg_channel_request},
 	{SSH_MSG_CHANNEL_OPEN, recv_msg_channel_open},
 	{SSH_MSG_CHANNEL_EOF, recv_msg_channel_eof},
@@ -62,18 +61,11 @@ static const packettype svr_packettypes[] = {
 	{SSH_MSG_CHANNEL_FAILURE, ignore_recv_response},
 	{SSH_MSG_REQUEST_FAILURE, ignore_recv_response}, /* for keepalive */
 	{SSH_MSG_REQUEST_SUCCESS, ignore_recv_response}, /* client */
-#ifdef USING_LISTENERS
-	{SSH_MSG_CHANNEL_OPEN_CONFIRMATION, recv_msg_channel_open_confirmation},
-	{SSH_MSG_CHANNEL_OPEN_FAILURE, recv_msg_channel_open_failure},
-#endif
 	{0, 0} /* End */
 };
 
 static const struct ChanType *svr_chantypes[] = {
 	&svrchansess,
-#ifdef ENABLE_SVR_LOCALTCPFWD
-	&svr_chan_tcpdirect,
-#endif
 	NULL /* Null termination is mandatory. */
 };
 

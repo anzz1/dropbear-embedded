@@ -1,7 +1,6 @@
 #include "includes.h"
 #include "dbutil.h"
 #include "buffer.h"
-#include "ecdsa.h"
 #include "genrsa.h"
 #include "gendss.h"
 #include "signkey.h"
@@ -61,16 +60,6 @@ static int get_default_bits(enum signkey_type keytype)
 		case DROPBEAR_SIGNKEY_DSS:
 			return DSS_DEFAULT_SIZE;
 #endif
-#ifdef DROPBEAR_ECDSA
-		case DROPBEAR_SIGNKEY_ECDSA_KEYGEN:
-			return ECDSA_DEFAULT_SIZE;
-		case DROPBEAR_SIGNKEY_ECDSA_NISTP521:
-			return 521;
-		case DROPBEAR_SIGNKEY_ECDSA_NISTP384:
-			return 384;
-		case DROPBEAR_SIGNKEY_ECDSA_NISTP256:
-			return 256;
-#endif
 		default:
 			return 0;
 	}
@@ -104,18 +93,6 @@ int signkey_generate(enum signkey_type keytype, int bits, const char* filename, 
 			key->dsskey = gen_dss_priv_key(bits);
 			break;
 #endif
-#ifdef DROPBEAR_ECDSA
-		case DROPBEAR_SIGNKEY_ECDSA_KEYGEN:
-		case DROPBEAR_SIGNKEY_ECDSA_NISTP521:
-		case DROPBEAR_SIGNKEY_ECDSA_NISTP384:
-		case DROPBEAR_SIGNKEY_ECDSA_NISTP256:
-			{
-				ecc_key *ecckey = gen_ecdsa_priv_key(bits);
-				keytype = ecdsa_signkey_type(ecckey);
-				*signkey_key_ptr(key, keytype) = ecckey;
-			}
-			break;
-#endif
 		default:
 			dropbear_exit("Internal error");
 	}
@@ -137,7 +114,7 @@ int signkey_generate(enum signkey_type keytype, int bits, const char* filename, 
 		goto out;
 	}
 
-	if (link(fn_temp, filename) < 0) {
+	if (rename(fn_temp, filename) < 0) {
 		/* If generating keys on connection (skipexist) it's OK to get EEXIST 
 		- we probably just lost a race with another connection to generate the key */
 		if (!(skip_exist && errno == EEXIST)) {
