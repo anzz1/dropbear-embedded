@@ -1,3 +1,8 @@
+ifeq (,$(CROSS_COMPILE))
+$(error missing CROSS_COMPILE for this toolchain)
+endif
+
+CFLAGS  += -marm -march=armv7ve+simd -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard
 
 STATIC_LTC=libtomcrypt/libtomcrypt.a
 STATIC_LTM=libtommath/libtommath.a

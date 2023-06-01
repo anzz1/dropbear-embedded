@@ -16,10 +16,10 @@
 
 /* Default hostkey paths - these can be specified on the command line */
 #ifndef DSS_PRIV_FILENAME
-#define DSS_PRIV_FILENAME "/etc/dropbear/dropbear_dss_host_key"
+#define DSS_PRIV_FILENAME "/mnt/SDCARD/.userdata/.ssh/ssh_dss_host_key"
 #endif
 #ifndef RSA_PRIV_FILENAME
-#define RSA_PRIV_FILENAME "/etc/dropbear/dropbear_rsa_host_key"
+#define RSA_PRIV_FILENAME "/mnt/SDCARD/.userdata/.ssh/ssh_rsa_host_key"
 #endif
 
 #define NON_INETD_MODE
