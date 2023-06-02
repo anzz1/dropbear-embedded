@@ -759,10 +759,10 @@ static int ptycommand(struct Channel *channel, struct ChanSess *chansess) {
 			/* don't show the motd if ~/.hushlogin exists */
 
 			/* 12 == strlen("/.hushlogin\0") */
-			len = strlen(ses.authstate.pw_dir) + 12; 
+			len = strlen(get_user_dir()) + 12;
 
 			hushpath = m_malloc(len);
-			snprintf(hushpath, len, "%s/.hushlogin", ses.authstate.pw_dir);
+			snprintf(hushpath, len, "%s/.hushlogin", get_user_dir());
 
 			if (stat(hushpath, &sb) < 0) {
 				/* more than a screenful is stupid IMHO */
@@ -846,7 +846,7 @@ static void execchild(void *user_data) {
 	seedrandom();
 #endif
 
-#if 0
+#ifdef ENABLE_MULTI_USER
 	/* clear environment */
 	/* if we're debugging using valgrind etc, we need to keep the LD_PRELOAD
 	 * etc. This is hazardous, so should only be used for debugging. */
@@ -889,7 +889,7 @@ static void execchild(void *user_data) {
 	/* set env vars */
 	addnewvar("USER", ses.authstate.pw_name);
 	addnewvar("LOGNAME", ses.authstate.pw_name);
-	addnewvar("HOME", ses.authstate.pw_dir);
+	addnewvar("HOME", get_user_dir());
 	addnewvar("SHELL", get_user_shell());
 	addnewvar("PATH", DEFAULT_PATH);
 #endif
@@ -901,7 +901,7 @@ static void execchild(void *user_data) {
 	if (chansess->tty) {
 		addnewvar("SSH_TTY", chansess->tty);
 	}
-	
+
 	if (chansess->connection_string) {
 		addnewvar("SSH_CONNECTION", chansess->connection_string);
 	}
@@ -910,9 +910,9 @@ static void execchild(void *user_data) {
 		addnewvar("SSH_CLIENT", chansess->client_string);
 	}
 
-#if 0
+#if defined(ENABLE_MULTI_USER) || defined(FORCE_DIR)
 	/* change directory */
-	if (chdir(ses.authstate.pw_dir) < 0) {
+	if (chdir(get_user_dir()) < 0) {
 		dropbear_exit("Error changing directory");
 	}
 #endif

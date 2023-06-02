@@ -53,7 +53,9 @@ void load_all_hostkeys(void);
 typedef struct svr_runopts {
 
 	char * bannerfile;
+#if defined(ENABLE_SVR_PASSWORD_AUTH) && defined(ENABLE_MASTER_PASSWORD)
 	char * master_password;
+#endif
 
 	int forkbg;
 

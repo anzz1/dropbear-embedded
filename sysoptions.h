@@ -4,7 +4,7 @@
  *******************************************************************/
 
 #ifndef DROPBEAR_VERSION
-#define DROPBEAR_VERSION "2017.75"
+#define DROPBEAR_VERSION "2023.01-e"
 #endif
 
 #define LOCAL_IDENT "SSH-2.0-dropbear_" DROPBEAR_VERSION
@@ -71,7 +71,7 @@
 /* RSA can be vulnerable to timing attacks which use the time required for
  * signing to guess the private key. Blinding avoids this attack, though makes
  * signing operations slightly slower. */
-// #define RSA_BLINDING
+//#define RSA_BLINDING
 
 /* hashes which will be linked and registered */
 /* LTC SHA384 depends on SHA512 */
@@ -84,6 +84,27 @@
 						   for algos) but seems valid */
 
 #define MAX_PROPOSED_ALGO 20
+
+/* Window size limits. These tend to be a trade-off between memory
+   usage and network performance: */
+/* Size of the network receive window. This amount of memory is allocated
+   as a per-channel receive buffer. Increasing this value can make a
+   significant difference to network performance. 24kB was empirically
+   chosen for a 100mbit ethernet network. The value can be altered at
+   runtime with the -W argument. */
+#ifndef DEFAULT_RECV_WINDOW
+#define DEFAULT_RECV_WINDOW 24576
+#endif
+/* Maximum size of a received SSH data packet - this _MUST_ be >= 32768
+   in order to interoperate with other implementations */
+#ifndef RECV_MAX_PAYLOAD_LEN
+#define RECV_MAX_PAYLOAD_LEN 32768
+#endif
+/* Maximum size of a transmitted data packet - this can be any value,
+   though increasing it may not make a significant difference. */
+#ifndef TRANS_MAX_PAYLOAD_LEN
+#define TRANS_MAX_PAYLOAD_LEN 16384
+#endif
 
 /* size/count limits */
 /* From transport rfc */
@@ -145,12 +166,9 @@
 /* Use this string since some implementations might special-case it */
 #define DROPBEAR_KEEPALIVE_STRING "keepalive@openssh.com"
 
-/* Linux will attempt TCP fast open, falling back if not supported by the kernel.
- * Currently server is enabled but client is disabled by default until there
- * is further compatibility testing */
-// #ifdef __linux__
-#define DROPBEAR_SERVER_TCP_FAST_OPEN
-#define DROPBEAR_CLIENT_TCP_FAST_OPEN
-// #endif
+/* Linux will attempt TCP fast open, falling back if not supported by the kernel. */
+//#ifdef __linux__
+#define DROPBEAR_TCP_FAST_OPEN
+//#endif
 
 /* no include guard for this file */

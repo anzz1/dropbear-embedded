@@ -51,6 +51,7 @@ void ignore_recv_response(void);
 
 void update_channel_prio(void);
 
+const char* get_user_dir(void);
 const char* get_user_shell(void);
 void fill_passwd(const char* username);
 

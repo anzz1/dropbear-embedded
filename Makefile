@@ -53,7 +53,7 @@ endif
 
 OPTIMIZE ?= -Ofast
 
-CFLAGS  += -I. -I$(srcdir) $(CPPFLAGS) $(OPTIMIZE) -Wall -std=gnu99
+CFLAGS  += -I. -I$(srcdir) $(CPPFLAGS) $(OPTIMIZE) -Wall -Werror-implicit-function-declaration -std=gnu99
 CFLAGS  += -ffunction-sections -fdata-sections -fmerge-all-constants -fno-stack-protector -fno-ident -fomit-frame-pointer  
 CFLAGS  += -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-unroll-loops -fno-math-errno -ffast-math
 CFLAGS  += -flto -fipa-pta -fipa-ra -fwhole-program -fuse-linker-plugin -Wl,--gc-sections 
@@ -62,8 +62,6 @@ LDFLAGS += -flto -fipa-pta -fipa-ra -fwhole-program -fuse-linker-plugin -Wl,--gc
 # CPPFLAGS=
 
 EXEEXT=
-
-CFLAGS+= -DDROPBEAR_SERVER
 
 # these are exported so that libtomcrypt's makefile will use them
 export CC

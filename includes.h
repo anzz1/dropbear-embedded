@@ -58,20 +58,8 @@
 #include <dirent.h>
 #include <time.h>
 
-#ifdef HAVE_UTMP_H
-#include <utmp.h>
-#endif
-
-#ifdef HAVE_UTMPX_H
-#include <utmpx.h>
-#endif
-
 #ifdef HAVE_PATHS_H
 #include <paths.h>
-#endif
-
-#ifdef HAVE_LASTLOG_H
-#include <lastlog.h>
 #endif
 
 #ifdef HAVE_NETINET_IN_H
@@ -100,19 +88,15 @@
 #include <libutil.h>
 #endif
 
-#ifdef HAVE_CRYPT_H
+#ifdef ENABLE_SVR_PASSWORD_AUTH
 #include <crypt.h>
-#endif
-
-#ifndef DISABLE_ZLIB
-#include <zlib.h>
 #endif
 
 #ifdef HAVE_UTIL_H
 #include <util.h>
 #endif
 
-#ifdef HAVE_SHADOW_H
+#ifdef ENABLE_SHADOW
 #include <shadow.h>
 #endif
 

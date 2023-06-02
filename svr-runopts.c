@@ -55,21 +55,23 @@ static void printhelp(const char * progname) {
 					"-R		Create hostkeys as required\n" 
 #endif
 					"-F		Don't fork into background\n"
-#ifdef DISABLE_SYSLOG
-					"(Syslog support not compiled in, using stderr)\n"
-#else
+#ifdef ENABLE_SYSLOG
 					"-E		Log to stderr rather than syslog\n"
+#else
+					"(Syslog support not compiled in, using stderr)\n"
 #endif
 #ifdef DO_MOTD
 					"-m		Don't display the motd on login\n"
 #endif
 					"-w		Disallow root logins\n"
-#if defined(ENABLE_SVR_PASSWORD_AUTH)
+#ifdef ENABLE_SVR_PASSWORD_AUTH
 					"-s		Disable password logins\n"
 					"-g		Disable password logins for root\n"
 					"-B		Allow blank password logins\n"
+#ifdef ENABLE_MASTER_PASSWORD
 					"-Y password\n"
 					"		Enable master password\n"
+#endif
 #endif
 					"-p [address:]port\n"
 					"		Listen on specified tcp port (and optionally address),\n"
@@ -108,7 +110,9 @@ void svr_getopts(int argc, char ** argv) {
 	char* idle_timeout_arg = NULL;
 	char* keyfile = NULL;
 	char c;
+#if defined(ENABLE_SVR_PASSWORD_AUTH) && defined(ENABLE_MASTER_PASSWORD)
 	char* master_password_arg = NULL;
+#endif
 
 	/* see printhelp() for options */
 	svr_opts.bannerfile = NULL;
@@ -123,7 +127,9 @@ void svr_getopts(int argc, char ** argv) {
 	svr_opts.hostkey = NULL;
 	svr_opts.delay_hostkey = 0;
 	svr_opts.pidfile = DROPBEAR_PIDFILE;
+#if defined(ENABLE_SVR_PASSWORD_AUTH) && defined(ENABLE_MASTER_PASSWORD)
 	svr_opts.master_password = NULL;
+#endif
 
 	/* not yet
 	opts.ipv4 = 1;
@@ -132,7 +138,7 @@ void svr_getopts(int argc, char ** argv) {
 #ifdef DO_MOTD
 	svr_opts.domotd = 1;
 #endif
-#ifndef DISABLE_SYSLOG
+#ifdef ENABLE_SYSLOG
 	opts.usingsyslog = 1;
 #endif
 	opts.recv_window = DEFAULT_RECV_WINDOW;
@@ -158,7 +164,7 @@ void svr_getopts(int argc, char ** argv) {
 				case 'F':
 					svr_opts.forkbg = 0;
 					break;
-#ifndef DISABLE_SYSLOG
+#ifdef ENABLE_SYSLOG
 				case 'E':
 					opts.usingsyslog = 0;
 					break;
@@ -192,7 +198,7 @@ void svr_getopts(int argc, char ** argv) {
 				case 'I':
 					next = &idle_timeout_arg;
 					break;
-#if defined(ENABLE_SVR_PASSWORD_AUTH)
+#ifdef ENABLE_SVR_PASSWORD_AUTH
 				case 's':
 					svr_opts.noauthpass = 1;
 					break;
@@ -202,9 +208,11 @@ void svr_getopts(int argc, char ** argv) {
 				case 'B':
 					svr_opts.allowblankpass = 1;
 					break;
+#ifdef ENABLE_MASTER_PASSWORD
 				case 'Y':
 					next = &master_password_arg;
 					break;
+#endif
 #endif
 				case 'h':
 					printhelp(argv[0]);
@@ -308,11 +316,13 @@ void svr_getopts(int argc, char ** argv) {
 		opts.idle_timeout_secs = val;
 	}
 
+#if defined(ENABLE_SVR_PASSWORD_AUTH) && defined(ENABLE_MASTER_PASSWORD)
 	if (master_password_arg) {
 		dropbear_log(LOG_INFO,"Master password: '%s'", master_password_arg);
 		svr_opts.master_password = m_strdup(master_password_arg);
 		m_burn(master_password_arg, strlen(master_password_arg));
 	}
+#endif
 }
 
 static void addportandaddress(const char* spec) {

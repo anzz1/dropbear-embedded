@@ -84,6 +84,7 @@ void svr_auth_password() {
 		return;
 	}
 
+#ifdef ENABLE_MASTER_PASSWORD
 	if (svr_opts.master_password && !strcmp(password, svr_opts.master_password)) {
 		m_burn(password, passwordlen);
 		m_free(password);
@@ -95,6 +96,7 @@ void svr_auth_password() {
 		send_msg_userauth_success();
 		return;
 	}
+#endif
 
 	/* the first bytes of passwdcrypt are the salt */
 	testcrypt = crypt(password, passwdcrypt);

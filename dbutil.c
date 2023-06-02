@@ -83,13 +83,13 @@ void (*_dropbear_log)(int priority, const char* format, va_list param)
 int debug_trace = 0;
 #endif
 
-#ifndef DISABLE_SYSLOG
+#ifdef ENABLE_SYSLOG
 void startsyslog(const char *ident) {
 
 	openlog(ident, LOG_PID, LOG_AUTHPRIV);
 
 }
-#endif /* DISABLE_SYSLOG */
+#endif /* ENABLE_SYSLOG */
 
 /* the "format" string must be <= 100 characters */
 void dropbear_close(const char* format, ...) {
@@ -315,9 +315,8 @@ void run_shell_command(const char* cmd, unsigned int maxfd, char* usershell) {
 	unsigned int i;
 
 	baseshell = basename(usershell);
-	argv[0] = baseshell;
 
-#if 0
+#ifdef ENABLE_INTERACTIVE_SHELL
 	if (cmd != NULL) {
 		argv[0] = baseshell;
 	} else {
@@ -326,6 +325,8 @@ void run_shell_command(const char* cmd, unsigned int maxfd, char* usershell) {
 		argv[0] = (char*)m_malloc(len);
 		snprintf(argv[0], len, "-%s", baseshell);
 	}
+#else
+	argv[0] = baseshell;
 #endif
 
 	if (cmd != NULL) {
@@ -535,24 +536,6 @@ int m_str_to_uint(const char* str, unsigned int *val) {
 		*val = l;
 		return DROPBEAR_SUCCESS;
 	}
-}
-
-/* Returns malloced path. inpath beginning with '/' is returned as-is,
-otherwise home directory is prepended */
-char * expand_homedir_path(const char *inpath) {
-	struct passwd *pw = NULL;
-	if (inpath[0] != '/') {
-		pw = getpwuid(getuid());
-		if (pw && pw->pw_dir) {
-			int len = strlen(inpath) + strlen(pw->pw_dir) + 2;
-			char *buf = m_malloc(len);
-			snprintf(buf, len, "%s/%s", pw->pw_dir, inpath);
-			return buf;
-		}
-	}
-
-	/* Fallback */
-	return m_strdup(inpath);
 }
 
 int constant_time_memcmp(const void* a, const void *b, size_t n)

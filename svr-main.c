@@ -360,7 +360,7 @@ static void sigintterm_handler(int UNUSED(unused)) {
 static void commonsetup() {
 
 	struct sigaction sa_chld;
-#ifndef DISABLE_SYSLOG
+#ifdef ENABLE_SYSLOG
 	if (opts.usingsyslog) {
 		startsyslog(PROGNAME);
 	}
@@ -423,7 +423,7 @@ static size_t listensockets(int *socks, size_t sockcount, int *maxfd) {
 		for (n = 0; n < (unsigned int)nsock; n++) {
 			int sock = socks[sockpos + n];
 			set_sock_priority(sock, DROPBEAR_PRIO_LOWDELAY);
-#ifdef DROPBEAR_SERVER_TCP_FAST_OPEN
+#ifdef DROPBEAR_TCP_FAST_OPEN
 			set_listen_fast_open(sock);
 #endif
 		}

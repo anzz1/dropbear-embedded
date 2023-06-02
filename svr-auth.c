@@ -250,6 +250,7 @@ static int checkusername(char *username, unsigned int userlen) {
 		return DROPBEAR_FAILURE;
 	}
 
+#ifndef FORCE_SHELL
 	TRACE(("shell is %s", ses.authstate.pw_shell))
 
 	/* check that the shell is set */
@@ -280,6 +281,7 @@ static int checkusername(char *username, unsigned int userlen) {
 goodshell:
 	endusershell();
 	TRACE(("matching shell"))
+#endif // FORCE_SHELL
 
 	TRACE(("uid = %d", ses.authstate.pw_uid))
 	TRACE(("leave checkusername"))

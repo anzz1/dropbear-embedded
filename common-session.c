@@ -565,24 +565,43 @@ static long select_timeout() {
 	return MAX(timeout, 0);
 }
 
+const char* get_user_dir() {
+#ifdef FORCE_DIR
+	return FORCE_DIR;
+#else
+	return ses.authstate.pw_dir;
+#endif
+}
+
 const char* get_user_shell() {
-	return "/bin/sh";
+#ifdef FORCE_SHELL
+	return FORCE_SHELL;
+#else
+	/* an empty shell should be interpreted as "/bin/sh" */
+	if (ses.authstate.pw_shell[0] == '\0') {
+		return "/bin/sh";
+	} else {
+		return ses.authstate.pw_shell;
+	}
+#endif
 }
 
 #ifdef FAKE_ROOT
+static struct passwd *fake_root = NULL;
 struct passwd *get_fake_pwnam(const char *username) {
-	static struct passwd *pw=NULL;
 	if(username && !strcmp(username,"root")) {
-		pw = (struct passwd *)malloc(sizeof(struct passwd));
-		if (pw) {
-		    pw->pw_uid=0;
-		    pw->pw_gid=0;
-		    pw->pw_name="root";
-		    pw->pw_dir="/";
-		    pw->pw_shell=NULL;
+		if (!fake_root)
+			fake_root = (struct passwd *)malloc(sizeof(struct passwd));
+		if (fake_root) {
+		    fake_root->pw_uid=0;
+		    fake_root->pw_gid=0;
+		    fake_root->pw_name="root";
+		    fake_root->pw_dir="/";
+		    fake_root->pw_shell=NULL;
 		}
+		return fake_root;
     }
-    return pw;
+    return NULL;
 }
 #endif
 
@@ -615,7 +634,7 @@ void fill_passwd(const char* username) {
 	ses.authstate.pw_shell = m_strdup(pw->pw_shell);
 	{
 		char *passwd_crypt = pw->pw_passwd;
-#ifdef HAVE_SHADOW_H
+#ifdef ENABLE_SHADOW
 		/* get the shadow password if possible */
 		struct spwd *spasswd = getspnam(ses.authstate.pw_name);
 		if (spasswd && spasswd->sp_pwdp) {

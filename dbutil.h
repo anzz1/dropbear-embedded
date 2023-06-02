@@ -31,7 +31,7 @@
 #include "queue.h"
 #include "dbhelpers.h"
 
-#ifndef DISABLE_SYSLOG
+#ifdef ENABLE_SYSLOG
 void startsyslog(const char *ident);
 #endif
 
@@ -82,8 +82,6 @@ int constant_time_memcmp(const void* a, const void *b, size_t n);
 /* Returns a time in seconds that doesn't go backwards - does not correspond to
 a real-world clock */
 time_t monotonic_now(void);
-
-char * expand_homedir_path(const char *inpath);
 
 void fsync_parent_dir(const char* fn);
 

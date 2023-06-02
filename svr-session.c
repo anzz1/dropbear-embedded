@@ -197,7 +197,7 @@ void svr_dropbear_log(int priority, const char* format, va_list param) {
 
 	vsnprintf(printbuf, sizeof(printbuf), format, param);
 
-#ifndef DISABLE_SYSLOG
+#ifdef ENABLE_SYSLOG
 	if (opts.usingsyslog) {
 		syslog(priority, "%s", printbuf);
 	}
